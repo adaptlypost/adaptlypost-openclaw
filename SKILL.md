@@ -125,13 +125,15 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/upload-urls \
 
 Returns `{ "urls": [{ "fileName", "uploadUrl", "publicUrl", "key", "expiresAt" }] }`.
 
-**Step B** — Upload file to storage:
+**Step B** — Upload file to storage (this is required — Step A only mints a URL, it does not store anything):
 
 ```bash
 curl -X PUT "UPLOAD_URL_HERE" \
   -H "Content-Type: image/jpeg" \
   --data-binary @/path/to/photo.jpg
 ```
+
+Confirm this PUT returns a `2xx` status before continuing. If you skip it, fail it, or let the upload URL expire (1 hour), Step C will reject the post with `400 Bad Request` and `Media file(s) not found in storage: <url>` — the server verifies every `publicUrl` exists in storage before creating the post. On that error, re-run Step B and confirm `2xx`, then retry Step C.
 
 **Step C** — Create post with the public URL:
 

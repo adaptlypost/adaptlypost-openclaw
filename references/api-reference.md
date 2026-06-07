@@ -295,9 +295,11 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 
 **Upload flow:**
 
-1. Call this endpoint to get `uploadUrl` and `publicUrl`
-2. PUT the raw file binary to `uploadUrl` with matching `Content-Type` header
+1. Call this endpoint to get `uploadUrl` and `publicUrl` (this only mints a URL — it does not store a file)
+2. PUT the raw file binary to `uploadUrl` with matching `Content-Type` header, and confirm a `2xx` response
 3. Use the `publicUrl` in `mediaUrls` when creating a post
+
+> **The file must be uploaded (step 2) before you reference its `publicUrl`.** `POST /social-posts` and `POST /social-posts/bulk` verify every `publicUrl` exists in storage. A URL whose PUT never completed (or whose upload URL expired after 1 hour) is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. In bulk requests this is reported per-post; the remaining posts are still scheduled.
 
 ## Enums
 
