@@ -49,7 +49,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-accounts
 ```
 
-Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Save the `id` — you'll use it as a connection ID when creating posts.
+Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. Save the `id` — you'll use it as a connection ID when creating posts.
 
 ### 2. Publish a post immediately (no scheduling)
 

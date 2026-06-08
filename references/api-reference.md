@@ -20,6 +20,14 @@ List all connected social media accounts for the account group tied to this API 
       "displayName": "John Doe",
       "username": "johndoe",
       "avatarUrl": "https://..."
+    },
+    {
+      "id": "cmlxmnxn20006hzpzvo291abc",
+      "platform": "FACEBOOK",
+      "displayName": "My Business Page",
+      "username": "",
+      "avatarUrl": "",
+      "pageId": "123456789012345"
     }
   ]
 }
@@ -30,6 +38,7 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 **Notes:**
 
 - Facebook accounts represent pages, not personal profiles
+- Facebook pages have no `username`; the `pageId` field carries the Facebook Page ID, which acts as the page's identifier
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
 
