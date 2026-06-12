@@ -1,6 +1,6 @@
 # Platform-Specific Configs Reference
 
-Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies. Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook).
+Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies. Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
 
 For bulk scheduling, configs can be set at two levels:
 - **Batch-level** (top-level request body) — applied to all posts as the default
@@ -85,7 +85,7 @@ For bulk scheduling, configs can be set at two levels:
 {
   "facebookConfigs": [
     {
-      "pageId": "facebook-page-id",
+      "pageId": "FACEBOOK_ACCOUNT_ID_FROM_SOCIAL_ACCOUNTS",
       "postType": "REEL",
       "videoTitle": "My Video Title"
     }
@@ -95,7 +95,7 @@ For bulk scheduling, configs can be set at two levels:
 
 | Parameter    | Type   | Required | Description                                  |
 | ------------ | ------ | -------- | -------------------------------------------- |
-| `pageId`     | string | **yes**  | Facebook page ID (from social accounts list) |
+| `pageId`     | string | **yes**  | Same value as in the top-level `pageIds` array (the Facebook account's `id` from `/social-accounts`) |
 | `postType`   | string | no       | `FEED`, `REEL`, or `STORY`. Default: `FEED`  |
 | `videoTitle` | string | no       | Video title (max 255 chars)                  |
 

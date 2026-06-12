@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule and manage social media posts across Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube using the AdaptlyPost API. Use when the user wants to schedule social media posts, manage social media content, upload media for social posting, list connected social accounts, check post status, cross-post content to multiple platforms, or automate their social media workflow. AdaptlyPost is a SaaS tool — no self-hosting required.
 homepage: https://adaptlypost.com
-version: 1.1.0
+version: 1.2.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -62,7 +62,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-accounts
 ```
 
-Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Facebook page accounts also include `pageId` (the Facebook Page ID) since pages have no `username`. Save the `id` — you'll use it as a connection ID when creating posts.
+Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Save the `id` — you'll use it as a connection ID when creating posts. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field (the page's public ID on facebook.com, shown since pages have no `username`) — it is informational, do NOT use it as an identifier in API calls.
 
 ### 2. Publish a post immediately (no scheduling)
 
@@ -87,7 +87,22 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 Returns `{ "postId", "queuedPlatforms", "skippedPlatforms", "isScheduled", "scheduledAt" }`.
 
-**Important**: You must include the correct `*ConnectionIds` array for each platform in `platforms`. For example, if posting to Instagram and Twitter, include both `instagramConnectionIds` and `twitterConnectionIds`. For Facebook, use `pageIds` instead.
+**Important**: You must include the correct `*ConnectionIds` array for each platform in `platforms`. For example, if posting to Instagram and Twitter, include both `instagramConnectionIds` and `twitterConnectionIds`. There is no `facebookConnectionIds` — Facebook posts target a *page*, so it uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts` (NOT its `pageId` field):
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["FACEBOOK"],
+    "contentType": "TEXT",
+    "text": "This goes live on my Facebook page right now!",
+    "timezone": "America/New_York",
+    "pageIds": ["FACEBOOK_ACCOUNT_ID_HERE"]
+  }'
+```
+
+If you omit `pageIds` (or use a wrong id) the post will not reach Facebook — never guess the id, always take it from `/social-accounts`.
 
 ### 3. Schedule a text post for later
 
@@ -320,7 +335,7 @@ Upload 1-20 files per request.
 - Always call `/social-accounts` first to get valid connection IDs for each platform.
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601 and in the future. Omit it when using `saveAsDraft: true`.
-- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`.
+- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.

@@ -38,7 +38,7 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 **Notes:**
 
 - Facebook accounts represent pages, not personal profiles
-- Facebook pages have no `username`; the `pageId` field carries the Facebook Page ID, which acts as the page's identifier
+- For Facebook, the `id` field is what you pass in `pageIds` when creating posts. The extra `pageId` field is the page's public ID on facebook.com — informational only (shown since pages have no `username`), do NOT pass it as an identifier
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
 
@@ -84,7 +84,7 @@ Create or schedule a post to one or more social media platforms.
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `scheduledAt` (string): ISO 8601 UTC datetime, must be in the future
 - `saveAsDraft` (boolean): Save as draft instead of scheduling/publishing
-- `pageIds` (string[]): Facebook page IDs
+- `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (not the `pageId` field)
 - `tiktokConnectionIds` (string[]): TikTok account connection IDs
 - `threadsConnectionIds` (string[]): Threads account connection IDs
 - `instagramConnectionIds` (string[]): Instagram account connection IDs
