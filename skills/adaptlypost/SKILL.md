@@ -187,10 +187,10 @@ For carousel: upload multiple files, include all public URLs in `mediaUrls`, use
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
-  "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0"
+  "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0&platforms=FACEBOOK&platforms=TIKTOK"
 ```
 
-Returns `{ "posts": [...], "total": 25, "hasMore": true }`. Use `limit` (1-100, default 20) and `offset` (default 0) for pagination.
+Returns `{ "posts": [...], "total": 25, "hasMore": true }`. Pagination: `limit` (1-100, default 20), `offset` (default 0). Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`), `startDate`/`endDate` (ISO 8601), and `sortOrder` (`NEWEST` or `OLDEST`).
 
 ### 7. Get post details
 

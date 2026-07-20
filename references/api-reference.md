@@ -126,11 +126,18 @@ List posts for the authenticated account group with pagination.
 
 - `limit` (integer, optional): Number of posts to return. Range: 1-100. Default: 20
 - `offset` (integer, optional): Number of posts to skip. Min: 0. Default: 0
+- `sortOrder` (string, optional): `NEWEST` or `OLDEST`. Default: `NEWEST`
+- `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value.
+- `platforms` (PlatformType[], optional): Filter by one or more platforms. Repeat the key per value.
+- `startDate` (string, optional): Only posts created on or after this date (ISO 8601, e.g. `2026-07-20`).
+- `endDate` (string, optional): Only posts created on or before this date (ISO 8601, e.g. `2026-07-22`).
+
+Array filters (`statuses`, `platforms`) are sent as repeated keys, e.g. `platforms=FACEBOOK&platforms=TIKTOK`.
 
 **Example:**
 
 ```
-GET /social-posts?limit=10&offset=0
+GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platforms=FACEBOOK
 ```
 
 **Response:**
@@ -167,8 +174,8 @@ GET /social-posts?limit=10&offset=0
 }
 ```
 
-**Post status values:** `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`, `DRAFT`
-**Platform status values:** `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`, `RETRY`
+**Post status values:** `DRAFT`, `SCHEDULED`, `PENDING`, `PUBLISHING`, `COMPLETED`, `PARTIAL_FAILURE`, `FAILED`
+**Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
 ### GET /social-posts/:id
 
