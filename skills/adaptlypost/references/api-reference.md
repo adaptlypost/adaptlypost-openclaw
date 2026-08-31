@@ -1,7 +1,9 @@
 # AdaptlyPost API Reference
 
 Base URL: `https://post.adaptlypost.com/post/api/v1`
-Auth: `Authorization: Bearer <api-token>` header. Tokens start with `adaptly_` prefix.
+Auth: `Authorization: Bearer <api-token>` header. Tokens start with the `adaptly_` prefix.
+
+The same header also accepts a WorkOS OAuth access token, which is how the hosted MCP server authenticates. For a skill, use an `adaptly_` token.
 
 ## Endpoints
 
@@ -317,6 +319,180 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 
 > **The file must be uploaded (step 2) before you reference its `publicUrl`.** `POST /social-posts` and `POST /social-posts/bulk` verify every `publicUrl` exists in storage. A URL whose PUT never completed (or whose upload URL expired after 1 hour) is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. In bulk requests this is reported per-post; the remaining posts are still scheduled.
 
+### GET /social-posts/:id/results
+
+Per-platform publishing outcome for one post. Each platform reports on its own, so read this per row rather than treating the post as one pass or fail.
+
+**Response:**
+
+```json
+{
+  "results": [
+    { "platformId": "pp_abc001", "platform": "TWITTER", "status": "PUBLISHED", "postUrl": "https://x.com/user/status/123", "errorMessage": null },
+    { "platformId": "pp_abc002", "platform": "TIKTOK", "status": "FAILED", "postUrl": null, "errorMessage": "Spam risk: too many posts in a short window" }
+  ]
+}
+```
+
+Take `platformId` from here when calling `POST /social-posts/:id/retry`.
+
+### PATCH /social-posts/:id
+
+Update a scheduled or draft post. Published posts cannot be updated, and the API rejects the attempt rather than partially applying it.
+
+Accepts the same body as `POST /social-posts`. Fields you omit stay as they are, except platform config arrays, which replace wholesale rather than merging.
+
+### DELETE /social-posts/:id
+
+Delete a scheduled or draft post. Published posts cannot be deleted through the API, since the content already exists on the platform. Removing it there is a manual step on each network.
+
+**Response:** `{ "deleted": true }`
+
+### POST /social-posts/:id/publish
+
+Publish a draft, either immediately or on a schedule.
+
+**Request:**
+
+```json
+{ "scheduledAt": "2026-03-15T10:00:00Z", "timezone": "UTC" }
+```
+
+Omit `scheduledAt` to publish now. This is irreversible from the agent's side once it returns.
+
+### POST /social-posts/:id/retry
+
+Retry the platforms that failed on a post.
+
+**Request:**
+
+```json
+{ "platformIds": ["pp_abc002"] }
+```
+
+Get `platformIds` from `GET /social-posts/:id/results`. Retry only after the cause is fixed. A platform restriction is that network's decision about the account and a retry will not clear it, while a refreshed token or replaced media will.
+
+### POST /connect-links
+
+Mint a one-time link that lets someone connect a social account to this account group without an AdaptlyPost login of their own. Built for agencies onboarding a client, and for agents that need an account connected but must never handle the credentials.
+
+**Response:**
+
+```json
+{
+  "url": "https://adaptlypost.com/connect/abc123",
+  "token": "abc123",
+  "expiresAt": "2026-03-16T10:00:00.000Z"
+}
+```
+
+Send the `url` to the person who owns the account. Anyone holding it can attach an account to your group, so treat it as a secret and revoke it once used.
+
+### DELETE /connect-links/:token
+
+Revoke a connect link before it is used or after it expires.
+
+**Response:** `{ "success": true }`
+
+Returns `404` when the token does not exist or belongs to another account group.
+
+## Webhooks
+
+Rather than polling `GET /social-posts` to find out whether something published, register a URL and let AdaptlyPost call you.
+
+### Events
+
+| event | fires when |
+|---|---|
+| `post.scheduled` | A post is accepted onto the schedule |
+| `post.published` | Every targeted platform published |
+| `post.partially_failed` | Some platforms published and some failed |
+| `post.failed` | Every platform failed |
+
+### POST /api/v1/webhooks
+
+**Request:** `{ "url": "https://example.com/hooks/adaptlypost" }`
+
+**Response:**
+
+```json
+{
+  "id": "wh_abc123",
+  "url": "https://example.com/hooks/adaptlypost",
+  "active": true,
+  "secret": "whsec_..."
+}
+```
+
+> The signing secret is returned **only here, only once**. It is not in `GET /webhooks` or `GET /webhooks/:id`. Store it when you create the webhook or delete it and make a new one.
+
+Maximum 10 webhooks per account group.
+
+### GET /api/v1/webhooks
+
+Returns `{ "webhooks": [...] }` without secrets.
+
+### GET /api/v1/webhooks/:id
+
+One webhook, without its secret.
+
+### PATCH /api/v1/webhooks/:id
+
+Body accepts `url` and `active`. Set `active: false` to pause deliveries without losing the registration and its secret.
+
+### DELETE /api/v1/webhooks/:id
+
+**Response:** `{ "deleted": true }`
+
+### POST /api/v1/webhooks/:id/test
+
+Sends a `webhook.test` event to the registered URL so you can verify signature checking before a real post depends on it.
+
+### Verifying a delivery
+
+Each request carries four headers:
+
+| header | contents |
+|---|---|
+| `x-adaptly-signature` | `sha256=<hex>` |
+| `x-adaptly-timestamp` | Unix timestamp used in the signature |
+| `x-adaptly-event` | Event name, for example `post.published` |
+| `x-adaptly-webhook-id` | Which registration produced this delivery |
+
+The signature is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`, hex encoded and prefixed with `sha256=`. Sign the **raw** body, before any JSON parsing, or the bytes will not match.
+
+```js
+const expected =
+  "sha256=" +
+  crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+```
+
+Compare with a timing-safe function, and reject timestamps that are far from now so an old capture cannot be replayed.
+
+### Delivery behaviour
+
+AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per attempt. After 20 consecutive failures the webhook is deactivated, which is why a receiver that has been down for a while goes quiet and stays quiet: reactivate it with `PATCH /webhooks/:id`.
+
+## Rate limits
+
+600 requests per minute per API token, counted on a hash of the token rather than on IP.
+
+Every response carries the RFC 9331 headers:
+
+```
+RateLimit-Policy: "adaptlypost-api";q=600;w=60
+RateLimit-Limit: 600
+RateLimit-Remaining: 587
+RateLimit-Reset: 43
+```
+
+A `429` adds `Retry-After` in seconds. Wait it out rather than retrying immediately, since a retry inside the window just burns the next allowance.
+
+## GET /openapi.json
+
+The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so Make, n8n and Zapier can import it without a token.
+
 ## Enums
 
 **PlatformType:**
@@ -345,6 +521,7 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 - `400` — Bad request (missing fields, invalid data, validation errors)
 - `401` — Invalid, expired, or missing API token
 - `404` — Resource not found or access denied
+- `429` — Rate limit exceeded; see `Retry-After`
 
 **Example error:**
 

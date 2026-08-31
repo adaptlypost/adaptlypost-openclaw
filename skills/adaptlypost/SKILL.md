@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule and manage social media posts across Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube using the AdaptlyPost API. Use when the user wants to schedule social media posts, manage social media content, upload media for social posting, list connected social accounts, check post status, cross-post content to multiple platforms, or automate their social media workflow. AdaptlyPost is a SaaS tool — no self-hosting required.
 homepage: https://adaptlypost.com
-version: 1.2.0
+version: 1.3.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -34,6 +34,10 @@ Schedule social media posts across 9 platforms from one API. SaaS — no self-ho
 Base URL: `https://post.adaptlypost.com/post/api/v1`
 Auth header: `Authorization: Bearer $ADAPTLYPOST_API_KEY`
 
+Rate limit: 600 requests per minute per token. Every response carries `RateLimit-Remaining` and `RateLimit-Reset`; a `429` adds `Retry-After` in seconds. Wait it out instead of retrying straight away.
+
+`GET /openapi.json` is public and needs no token, so automation platforms can import the spec.
+
 ## Safety rules — read before any write call
 
 Posts are **public, attributable, and hard to fully retract**. Treat every `POST /social-posts` and `POST /upload-urls` as a high-impact action.
@@ -62,7 +66,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-accounts
 ```
 
-Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Save the `id` — you'll use it as a connection ID when creating posts. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field (the page's public ID on facebook.com, shown since pages have no `username`) — it is informational, do NOT use it as an identifier in API calls.
+Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Save the `id` — you'll use it as a connection ID when creating posts. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field, the page's public ID on facebook.com, shown because pages have no `username`. `pageIds` accepts either that `pageId` or the account `id`, so both work.
 
 ### 2. Publish a post immediately (no scheduling)
 
@@ -243,6 +247,67 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
     "linkedinConnectionIds": ["LINKEDIN_ID"]
   }'
 ```
+
+
+### 10. Check per-platform results and retry what failed
+
+A post is not one pass or fail. Each platform reports separately.
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID/results
+```
+
+Read every row. `PUBLISHED` gives you a `postUrl`. `FAILED` gives you an `errorMessage` and a `platformId`.
+
+Then retry only the platforms that failed, and only once the cause is fixed:
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID/retry \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"platformIds": ["pp_abc002"]}'
+```
+
+Read the error before retrying. A rejected token or bad media is worth another attempt. A platform restriction ("too many posts in a short window") is that network's decision about the account, and retrying makes it worse rather than better. Tell the user and stop.
+
+### 11. Edit, delete, or publish a draft
+
+```bash
+curl -X PATCH  .../social-posts/POST_ID   -d '{"text": "Revised copy"}'
+curl -X DELETE .../social-posts/POST_ID
+curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
+```
+
+Only drafts and scheduled posts can be edited or deleted. Published content already exists on the network, and removing it there is a manual step per platform. Publishing a draft is subject to the same four-item confirmation as any other post.
+
+### 12. Connect an account without handling credentials
+
+When someone else owns the social account, mint a link instead of asking for their password:
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/connect-links \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY"
+```
+
+Returns `{ "url", "token", "expiresAt" }`. Send them the `url`. Anyone holding it can attach an account to this group, so treat it as a secret, and revoke it once used with `DELETE /connect-links/TOKEN`.
+
+Never ask a user for a social platform password. This endpoint exists so you never have to.
+
+### 13. Get notified instead of polling
+
+Register a webhook once and stop asking whether a post published:
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/hooks/adaptlypost"}'
+```
+
+Events are `post.scheduled`, `post.published`, `post.partially_failed` and `post.failed`.
+
+The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 
 ## Platform-Specific Configs
 

@@ -1,0 +1,96 @@
+{
+  "id": "adaptlypost",
+  "name": "AdaptlyPost",
+  "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky from OpenClaw.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "type": "string",
+        "description": "AdaptlyPost API token (adaptly_...). Create a dedicated, revocable one at https://adaptlypost.com under Settings then API Tokens."
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "API base URL. Only change this for local development.",
+        "default": "https://post.adaptlypost.com/post/api/v1"
+      }
+    },
+    "required": [
+      "apiToken"
+    ]
+  },
+  "contracts": {
+    "tools": [
+      "adaptlypost_accounts",
+      "adaptlypost_upload_media",
+      "adaptlypost_create_post",
+      "adaptlypost_list_posts",
+      "adaptlypost_post_results",
+      "adaptlypost_retry_failed"
+    ]
+  },
+  "toolMetadata": {
+    "adaptlypost_accounts": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_upload_media": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_create_post": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_posts": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_post_results": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_retry_failed": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    }
+  }
+}
