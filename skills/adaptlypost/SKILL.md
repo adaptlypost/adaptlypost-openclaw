@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule and manage social media posts across Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube using the AdaptlyPost API. Use when the user wants to schedule social media posts, manage social media content, upload media for social posting, list connected social accounts, check post status, cross-post content to multiple platforms, or automate their social media workflow. AdaptlyPost is a SaaS tool — no self-hosting required.
 homepage: https://adaptlypost.com
-version: 1.3.0
+version: 1.3.1
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -89,7 +89,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 **IMPORTANT**: Do NOT set `scheduledAt` to a time in the near future as a workaround. Omitting `scheduledAt` is the correct way to publish immediately.
 
-Returns `{ "postId", "queuedPlatforms", "skippedPlatforms", "isScheduled", "scheduledAt" }`.
+Returns `{ "postId", "queuedPlatforms", "skippedPlatforms", "isScheduled", "scheduledAt" }`. That response confirms queueing, not delivery: publishing runs asynchronously per platform, so read `GET /social-posts/:id/results` (step 10) for the outcome. A `scheduledAt` in the past is treated the same as omitting it.
 
 **Important**: You must include the correct `*ConnectionIds` array for each platform in `platforms`. For example, if posting to Instagram and Twitter, include both `instagramConnectionIds` and `twitterConnectionIds`. There is no `facebookConnectionIds` — Facebook posts target a *page*, so it uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts` (NOT its `pageId` field):
 
@@ -194,7 +194,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0&platforms=FACEBOOK&platforms=TIKTOK"
 ```
 
-Returns `{ "posts": [...], "total": 25, "hasMore": true }`. Pagination: `limit` (1-100, default 20), `offset` (default 0). Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`), `startDate`/`endDate` (ISO 8601), and `sortOrder` (`NEWEST` or `OLDEST`).
+Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
 
 ### 7. Get post details
 
@@ -203,7 +203,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID
 ```
 
-Returns full post object with platform-specific status for each target platform.
+Returns the full post object (`text`, `contentType`, `status`, `scheduledAt`, `timezone`) with a `platforms` array carrying each target's `status` and `errorMessage`. Ids outside this token's account group return `404` `Post not found or access denied`. Use this before editing or publishing a draft; use step 10 when you only need per-platform outcomes and the `platformId`s for a retry.
 
 ### 8. Cross-post to multiple platforms
 
@@ -258,7 +258,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID/results
 ```
 
-Read every row. `PUBLISHED` gives you a `postUrl`. `FAILED` gives you an `errorMessage` and a `platformId`.
+Returns `{ "postId", "status", "results": [{ "platformId", "platform", "accountName", "status", "platformPostId", "errorMessage", "publishedAt" }] }`. Read every row. `PUBLISHED` gives you a `platformPostId` and `publishedAt`. `FAILED` gives you an `errorMessage` and a `platformId`. Rows still `PENDING` or `PUBLISHING` are in flight, so poll until none remain.
 
 Then retry only the platforms that failed, and only once the cause is fixed:
 
@@ -268,6 +268,8 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID/retry
   -H "Content-Type: application/json" \
   -d '{"platformIds": ["pp_abc002"]}'
 ```
+
+Only rows whose status is `FAILED` and whose id you pass are reset and re-queued with the same content; other ids are ignored, and if none qualify the API returns `400` `No failed platforms to retry`. The post moves back to `PUBLISHING` and the retry is asynchronous, so read the results again afterwards.
 
 Read the error before retrying. A rejected token or bad media is worth another attempt. A platform restriction ("too many posts in a short window") is that network's decision about the account, and retrying makes it worse rather than better. Tell the user and stop.
 
@@ -279,7 +281,11 @@ curl -X DELETE .../social-posts/POST_ID
 curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
 ```
 
-Only drafts and scheduled posts can be edited or deleted. Published content already exists on the network, and removing it there is a manual step per platform. Publishing a draft is subject to the same four-item confirmation as any other post.
+`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
+
+`DELETE` removes the record from AdaptlyPost, and a deleted scheduled post will not publish. It never removes content already on a network: deleting a `COMPLETED` post only drops AdaptlyPost's record, and removing the live post is a manual step per platform. Prefer `PATCH` over delete-and-recreate.
+
+`POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. Omit `scheduledAt` (or pass a past time) and the post moves to `PENDING` with a publishing job queued per platform, so the content reaches the networks within moments and cannot be recalled. A future `scheduledAt` sets `SCHEDULED` and queues nothing yet. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
 
 ### 12. Connect an account without handling credentials
 
@@ -399,7 +405,8 @@ Upload 1-20 files per request.
 
 - Always call `/social-accounts` first to get valid connection IDs for each platform.
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
-- `scheduledAt` must be ISO 8601 and in the future. Omit it when using `saveAsDraft: true`.
+- `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.
+- `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
 - Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
@@ -407,3 +414,7 @@ Upload 1-20 files per request.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos).
 - Check `skippedPlatforms` in the response — it tells you if any platform was skipped and why.
+- Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
+- To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.
+- Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.
+- Retry only `FAILED` rows, by `platformId` from the results endpoint, and only after the cause is fixed.

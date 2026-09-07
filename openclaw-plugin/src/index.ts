@@ -43,7 +43,12 @@ const ConnectionIdFields = {
   threadsConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Threads connection ids." })),
   blueskyConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Bluesky connection ids." })),
   pinterestConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Pinterest connection ids." })),
-  pageIds: Type.Optional(Type.Array(Type.String(), { description: "Facebook page ids, not connection ids." })),
+  pageIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Facebook page account ids from adaptlypost_accounts (the account id; its pageId value also works). Facebook has no connection-id array.",
+    }),
+  ),
 };
 
 const PlatformConfigFields = {
@@ -61,7 +66,7 @@ const PlatformConfigFields = {
         sendAsDraft: Type.Optional(Type.Boolean()),
         aiGenerated: Type.Optional(Type.Boolean()),
       }),
-      { description: "Required for TikTok: privacyLevel has no default." },
+      { description: "Required for TikTok: each entry needs connectionId and privacyLevel, which has no default." },
     ),
   ),
   youtubeConfigs: Type.Optional(
@@ -97,13 +102,17 @@ const PlatformConfigFields = {
         ),
         videoTitle: Type.Optional(Type.String({ maxLength: 255 })),
       }),
+      { description: "Facebook per-page config. pageId must match an entry in pageIds." },
     ),
   ),
   pinterestConfigs: Type.Optional(
     Type.Array(
       Type.Object({
         connectionId: Type.String(),
-        boardId: Type.String({ description: "Required. Pinterest rejects a pin with no board." }),
+        boardId: Type.String({
+          description:
+            "Required. Pinterest rejects a pin with no board, and there is no API to list boards, so ask the user for the board id.",
+        }),
         title: Type.Optional(Type.String({ maxLength: 100 })),
         link: Type.Optional(Type.String()),
       }),
@@ -123,7 +132,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to AdaptlyPost with their connection ids and platforms. Call this before creating a post: adaptlypost_create_post takes connection ids, never usernames. Facebook pages carry a pageId instead of a username and go in pageIds, not a connection id array.",
+        "List the social accounts connected to the token's workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -134,7 +143,7 @@ export default definePluginEntry({
       name: "adaptlypost_upload_media",
       label: "AdaptlyPost: upload media",
       description:
-        "Upload images or videos to AdaptlyPost storage and get back public URLs for adaptlypost_create_post mediaUrls. Takes local file paths, remote URLs, or both. Accepts jpeg, png, webp, mp4 and quicktime. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'.",
+        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Two sources, combinable in one call: file_paths (files on disk) and urls (public URLs the plugin downloads and re-hosts). Omitting both returns an error. Accepts jpeg, png, webp, mp4 and quicktime, judged by file extension. Stored files are public immediately, post or no post, so confirm each file with the user first. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.",
       parameters: Type.Object({
         file_paths: Type.Optional(
           Type.Array(Type.String(), { description: "Absolute or relative paths to files on disk." }),
@@ -171,11 +180,12 @@ export default definePluginEntry({
       name: "adaptlypost_create_post",
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post targeting any set of connected accounts. Omit scheduledAt to publish immediately, or set saveAsDraft to store it without publishing. Media must already be uploaded through adaptlypost_upload_media. Each platform publishes independently, so one failure does not stop the others. Vary the caption per platform with platformTexts when posting the same content widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT for review in the AdaptlyPost app. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
-          description: "Target platforms. Must match the connection id arrays you fill in.",
+          description:
+            "Target platforms. Each needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from adaptlypost_accounts.",
         }),
         contentType: Type.Union(
           [Type.Literal("TEXT"), Type.Literal("IMAGE"), Type.Literal("VIDEO"), Type.Literal("CAROUSEL")],
@@ -193,10 +203,23 @@ export default definePluginEntry({
           }),
         ),
         scheduledAt: Type.Optional(
-          Type.String({ description: "ISO 8601 timestamp. Omit to publish immediately." }),
+          Type.String({
+            description:
+              "Absolute ISO 8601 instant. Omit to publish immediately; a past time also publishes immediately.",
+          }),
         ),
-        timezone: Type.Optional(Type.String({ description: "IANA timezone, defaults to UTC." })),
-        saveAsDraft: Type.Optional(Type.Boolean({ description: "Store without publishing or scheduling." })),
+        timezone: Type.Optional(
+          Type.String({
+            description:
+              "IANA timezone stored with the post for display, defaults to UTC; it does not shift scheduledAt.",
+          }),
+        ),
+        saveAsDraft: Type.Optional(
+          Type.Boolean({
+            description:
+              "Store as DRAFT without publishing or scheduling; the user publishes it from the AdaptlyPost app.",
+          }),
+        ),
         thumbnailUrl: Type.Optional(Type.String({ description: "Custom thumbnail for video posts." })),
         ...ConnectionIdFields,
         ...PlatformConfigFields,
@@ -210,15 +233,38 @@ export default definePluginEntry({
       name: "adaptlypost_list_posts",
       label: "AdaptlyPost: list posts",
       description:
-        "List posts including scheduled and draft ones. Check what is already queued before adding more: stacking several posts onto one account in a short window is the most common cause of a platform restriction.",
+        "List posts in the token's workspace, any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Check what is already queued before adding more: stacking several posts onto one account in a short window is the most common cause of a platform restriction. Use adaptlypost_post_results for one post's per-platform outcomes and retry ids.",
       parameters: Type.Object({
-        statuses: Type.Optional(Type.Array(PostStatus, { description: "Filter by post status." })),
-        platforms: Type.Optional(Type.Array(Platform, { description: "Filter by platform." })),
-        startDate: Type.Optional(Type.String({ description: "ISO 8601 lower bound." })),
-        endDate: Type.Optional(Type.String({ description: "ISO 8601 upper bound." })),
-        sortOrder: Type.Optional(Type.Union([Type.Literal("NEWEST"), Type.Literal("OLDEST")])),
-        limit: Type.Optional(Type.Integer({ minimum: 1, description: "Defaults to 20." })),
-        offset: Type.Optional(Type.Integer({ minimum: 0 })),
+        statuses: Type.Optional(
+          Type.Array(PostStatus, { description: "Filter by post status; omit for all statuses." }),
+        ),
+        platforms: Type.Optional(
+          Type.Array(Platform, { description: "Filter to posts targeting any of these platforms." }),
+        ),
+        startDate: Type.Optional(
+          Type.String({
+            description:
+              "Lower bound (ISO 8601) on scheduledAt, or createdAt for posts never scheduled.",
+          }),
+        ),
+        endDate: Type.Optional(
+          Type.String({
+            description:
+              "Upper bound (ISO 8601) on scheduledAt, or createdAt for posts never scheduled.",
+          }),
+        ),
+        sortOrder: Type.Optional(
+          Type.Union([Type.Literal("NEWEST"), Type.Literal("OLDEST")], {
+            description: "NEWEST (default) or OLDEST.",
+          }),
+        ),
+        limit: Type.Optional(Type.Integer({ minimum: 1, description: "1 to 100, defaults to 20." })),
+        offset: Type.Optional(
+          Type.Integer({
+            minimum: 0,
+            description: "Posts to skip; increase by limit while hasMore is true.",
+          }),
+        ),
       }),
       async execute(_toolCallId, params, signal) {
         return jsonResult(
@@ -234,9 +280,11 @@ export default definePluginEntry({
       name: "adaptlypost_post_results",
       label: "AdaptlyPost: per-platform results",
       description:
-        "Read the per-platform publishing result for one post. Each platform reports separately, so read this per platform rather than treating a post as one pass or fail. A platform restriction is that platform's decision about the account and retrying will not clear it; a dead token or rejected media will.",
+        "Get one post's per-platform publishing outcomes: { postId, status, results[] } where each result has platformId, platform, accountName, status (PENDING, PUBLISHING, PUBLISHED, or FAILED), platformPostId, errorMessage, and publishedAt. Each platform reports separately, so read every row rather than treating a post as one pass or fail. Call this after adaptlypost_create_post or adaptlypost_retry_failed, since publishing is asynchronous and their responses only confirm queueing; poll until no row is PENDING or PUBLISHING. Take platformId from FAILED rows for adaptlypost_retry_failed. A platform restriction is that platform's decision about the account and retrying will not clear it; a dead token or rejected media will.",
       parameters: Type.Object({
-        post_id: Type.String({ description: "Post id from adaptlypost_create_post or adaptlypost_list_posts." }),
+        post_id: Type.String({
+          description: "Post id from adaptlypost_create_post or adaptlypost_list_posts.",
+        }),
       }),
       async execute(_toolCallId, params, signal) {
         const { post_id: postId } = params as { post_id: string };
@@ -250,12 +298,12 @@ export default definePluginEntry({
       name: "adaptlypost_retry_failed",
       label: "AdaptlyPost: retry failed platforms",
       description:
-        "Retry publishing on platforms that failed for one post. Take the platform ids from adaptlypost_post_results. Retry only after the underlying cause is fixed: repeatedly retrying a platform restriction makes it worse.",
+        "Re-queue publishing for a post's FAILED platforms. Only rows with status FAILED whose id is in platform_ids are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with 'No failed platforms to retry'. The post moves to PUBLISHING and the retry is asynchronous, so check adaptlypost_post_results for the outcome. Get platform_ids (not platform names) and each errorMessage from adaptlypost_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform restriction, which repeated retries make worse. Content cannot change on retry.",
       parameters: Type.Object({
-        post_id: Type.String({ description: "Post id to retry." }),
+        post_id: Type.String({ description: "Post id whose platforms failed." }),
         platform_ids: Type.Array(Type.String(), {
           minItems: 1,
-          description: "Failed platform ids from adaptlypost_post_results.",
+          description: "platformId values of FAILED rows from adaptlypost_post_results, not platform names.",
         }),
       }),
       async execute(_toolCallId, params, signal) {

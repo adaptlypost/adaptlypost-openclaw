@@ -76,7 +76,7 @@ Create or schedule a post to one or more social media platforms.
 
 - `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
 - `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, or `CAROUSEL`
-- `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`)
+- `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
 **Optional fields:**
 
@@ -84,8 +84,8 @@ Create or schedule a post to one or more social media platforms.
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`
 - `mediaUrls` (string[]): Public URLs of uploaded media files
 - `thumbnailUrl` (string): Thumbnail URL for video posts
-- `scheduledAt` (string): ISO 8601 UTC datetime, must be in the future
-- `saveAsDraft` (boolean): Save as draft instead of scheduling/publishing
+- `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
+- `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
 - `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (not the `pageId` field)
 - `tiktokConnectionIds` (string[]): TikTok account connection IDs
 - `threadsConnectionIds` (string[]): Threads account connection IDs
@@ -120,9 +120,11 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 }
 ```
 
+`queuedPlatforms` confirms that publishing jobs were queued, not that they succeeded: each platform publishes asynchronously and on its own, so read `GET /social-posts/:id/results` for the outcome. A future `scheduledAt` returns `isScheduled: true` with status `SCHEDULED`; a missing or past `scheduledAt` publishes immediately with status `PENDING`; `saveAsDraft: true` stores a `DRAFT`.
+
 ### GET /social-posts
 
-List posts for the authenticated account group with pagination.
+List every post in the authenticated account group, any status, with pagination. Newest first by default.
 
 **Query parameters:**
 
@@ -131,8 +133,8 @@ List posts for the authenticated account group with pagination.
 - `sortOrder` (string, optional): `NEWEST` or `OLDEST`. Default: `NEWEST`
 - `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value.
 - `platforms` (PlatformType[], optional): Filter by one or more platforms. Repeat the key per value.
-- `startDate` (string, optional): Only posts created on or after this date (ISO 8601, e.g. `2026-07-20`).
-- `endDate` (string, optional): Only posts created on or before this date (ISO 8601, e.g. `2026-07-22`).
+- `startDate` (string, optional): Lower bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-20`).
+- `endDate` (string, optional): Upper bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-22`).
 
 Array filters (`statuses`, `platforms`) are sent as repeated keys, e.g. `platforms=FACEBOOK&platforms=TIKTOK`.
 
@@ -321,36 +323,40 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 
 ### GET /social-posts/:id/results
 
-Per-platform publishing outcome for one post. Each platform reports on its own, so read this per row rather than treating the post as one pass or fail.
+Per-platform publishing outcome for one post. Each platform reports on its own, so read this per row rather than treating the post as one pass or fail. Publishing is asynchronous, so poll until no row is `PENDING` or `PUBLISHING`.
 
 **Response:**
 
 ```json
 {
+  "postId": "cmm0z0k3q0000i0r5mxn0hfhs",
+  "status": "PARTIAL_FAILURE",
   "results": [
-    { "platformId": "pp_abc001", "platform": "TWITTER", "status": "PUBLISHED", "postUrl": "https://x.com/user/status/123", "errorMessage": null },
-    { "platformId": "pp_abc002", "platform": "TIKTOK", "status": "FAILED", "postUrl": null, "errorMessage": "Spam risk: too many posts in a short window" }
+    { "platformId": "pp_abc001", "platform": "TWITTER", "accountName": "johndoe", "status": "PUBLISHED", "platformPostId": "1234567890", "errorMessage": null, "publishedAt": "2026-06-15T10:00:12.000Z" },
+    { "platformId": "pp_abc002", "platform": "TIKTOK", "accountName": "johndoe", "status": "FAILED", "platformPostId": null, "errorMessage": "Spam risk: too many posts in a short window", "publishedAt": null }
   ]
 }
 ```
 
-Take `platformId` from here when calling `POST /social-posts/:id/retry`.
+Take `platformId` from `FAILED` rows when calling `POST /social-posts/:id/retry`. Use `GET /social-posts/:id` instead when you also need the content and schedule.
 
 ### PATCH /social-posts/:id
 
-Update a scheduled or draft post. Published posts cannot be updated, and the API rejects the attempt rather than partially applying it.
+Update a `DRAFT` or `SCHEDULED` post. Any other status is rejected with `400` `Cannot edit post in current state` rather than partially applied.
 
-Accepts the same body as `POST /social-posts`. Fields you omit stay as they are, except platform config arrays, which replace wholesale rather than merging.
+Accepts the same body as `POST /social-posts`, minus `saveAsDraft`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, and `thumbnailTimestampMs` you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
+
+**Response:** the updated post, in the same shape as `GET /social-posts/:id`.
 
 ### DELETE /social-posts/:id
 
-Delete a scheduled or draft post. Published posts cannot be deleted through the API, since the content already exists on the platform. Removing it there is a manual step on each network.
+Delete a post record. Use it to cancel a `DRAFT` or `SCHEDULED` post; a deleted scheduled post will not publish. The API does not refuse other statuses, but deleting a `COMPLETED` or `PARTIAL_FAILURE` post only drops AdaptlyPost's record: the content already exists on each network, and removing it there is a manual step. Prefer `PATCH` over delete-and-recreate. Irreversible.
 
 **Response:** `{ "deleted": true }`
 
 ### POST /social-posts/:id/publish
 
-Publish a draft, either immediately or on a schedule.
+Publish a draft, either immediately or on a schedule. Accepts a `DRAFT`, and also a `SCHEDULED` post to reschedule it or push it live; any other status returns `400` `Post is not a draft`.
 
 **Request:**
 
@@ -358,11 +364,13 @@ Publish a draft, either immediately or on a schedule.
 { "scheduledAt": "2026-03-15T10:00:00Z", "timezone": "UTC" }
 ```
 
-Omit `scheduledAt` to publish now. This is irreversible from the agent's side once it returns.
+Omit `scheduledAt` (or pass a past time) to publish now: the post moves to `PENDING`, a publishing job is queued per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. A future `scheduledAt` sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
+
+**Response:** `{ "postId", "queuedPlatforms", "isScheduled", "scheduledAt" }`. Read `GET /social-posts/:id/results` afterwards for the per-platform outcome.
 
 ### POST /social-posts/:id/retry
 
-Retry the platforms that failed on a post.
+Retry the platforms that failed on a post. Only rows whose status is `FAILED` and whose id is in `platformIds` are reset to `PENDING` and re-queued with the same content; other ids are ignored, and if none qualify the API returns `400` `No failed platforms to retry`. The post moves to `PUBLISHING` and the retry is asynchronous, so read the results endpoint again afterwards.
 
 **Request:**
 
@@ -370,7 +378,9 @@ Retry the platforms that failed on a post.
 { "platformIds": ["pp_abc002"] }
 ```
 
-Get `platformIds` from `GET /social-posts/:id/results`. Retry only after the cause is fixed. A platform restriction is that network's decision about the account and a retry will not clear it, while a refreshed token or replaced media will.
+**Response:** `{ "postId", "queuedPlatforms", "isScheduled": false }`
+
+Get `platformIds` (not platform names) from `GET /social-posts/:id/results`. Retry only after the cause is fixed. A platform restriction is that network's decision about the account and a retry will not clear it, while a refreshed token or replaced media will.
 
 ### POST /connect-links
 
