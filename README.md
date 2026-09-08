@@ -1,6 +1,6 @@
 # AdaptlyPost Agent Skill 📬
 
-Schedule and manage social media posts across 9 platforms — Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube — from a single API. AdaptlyPost is a SaaS tool: no self-hosting required.
+Schedule and manage social media posts across 9 platforms — Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube — from a single API, and read how they performed. AdaptlyPost is a SaaS tool: no self-hosting required.
 
 This repo ships one skill in two layouts so it works with both **OpenClaw** and **Hermes Agent**:
 

@@ -1,8 +1,8 @@
 ---
 name: adaptlypost
-description: Schedule and manage social media posts across Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube using the AdaptlyPost API. Use when the user wants to schedule social media posts, manage social media content, upload media for social posting, list connected social accounts, check post status, cross-post content to multiple platforms, or automate their social media workflow. AdaptlyPost is a SaaS tool — no self-hosting required.
+description: Schedule and manage social media posts across Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube using the AdaptlyPost API, and read how they performed. Use when the user wants to schedule social media posts, manage social media content, upload media for social posting, list connected social accounts, check post status, cross-post content to multiple platforms, automate their social media workflow, or ask about views, likes, comments, followers, engagement or top posts on their connected accounts. AdaptlyPost is a SaaS tool — no self-hosting required.
 homepage: https://adaptlypost.com
-version: 1.3.1
+version: 1.4.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -17,7 +17,7 @@ metadata:
 
 # AdaptlyPost
 
-Schedule social media posts across 9 platforms from one API. SaaS — no self-hosting needed.
+Schedule social media posts across 9 platforms from one API, then read the numbers back. SaaS — no self-hosting needed.
 
 ## Setup
 
@@ -315,6 +315,28 @@ Events are `post.scheduled`, `post.published`, `post.partially_failed` and `post
 
 The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 
+### 14. Read the numbers
+
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X has no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so both return nothing. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/analytics/overview?from=2026-08-01&to=2026-08-31"
+```
+
+Returns `views`, `likes`, `comments`, `shares`, `followers`, `postsCount`, `avgViewsPerPost` and `engagementRate`, each as `{ "value", "previousValue", "deltaPercent" }`, plus `partialMetrics` (metrics some selected platform cannot report) and `lastSyncedAt`. A metric no selected platform reports is `null`; say so rather than reporting zero.
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/analytics/posts?from=2026-08-01&to=2026-08-31&sortBy=VIEWS&limit=5"
+```
+
+Per-post metrics for posts published in the window, `{ "posts", "total", "page", "limit", "hasMore" }`. `sortBy` is `VIEWS`, `LIKES`, `COMMENTS`, `SHARES`, `SAVES`, `CLICKS`, `IMPRESSIONS`, `ENGAGEMENT_RATE` or `PUBLISHED_AT` (the default). Each post carries `platform`, `publishedAt`, `title`, `permalink`, `accountName` and `metrics`; posts published outside AdaptlyPost are included with `postId: null`. This is performance, not delivery: step 10 answers "did it publish", this answers "how did it do".
+
+Also available: `/analytics/timeseries?granularity=DAILY|WEEKLY|MONTHLY` for a trend, `/analytics/platform-breakdown` to compare platforms (read `supportedMetrics` before comparing), `/analytics/top-posts` for the top `limit` without pagination, and `/analytics/discovered-posts` for posts found on the accounts that AdaptlyPost did not publish.
+
+Numbers refresh every few hours. If the user just published, `POST /analytics/sync` refreshes now, once per 10 minutes per workspace; inside the cooldown it returns `queued: false` with `cooldownSecondsRemaining`, so do not loop. Then poll `GET /analytics/sync-status` until `syncInProgress` is false. That endpoint also flags `needsAnalyticsReconnect` per account: the account was connected before analytics permissions existed and stays empty until the user reconnects it, so tell them instead of querying again. Full reference in [references/api-reference.md](references/api-reference.md#analytics).
+
 ## Platform-Specific Configs
 
 Pass these as config arrays in the request body. See [references/platform-configs.md](references/platform-configs.md) for full details.
@@ -418,3 +440,4 @@ Upload 1-20 files per request.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.
 - Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.
 - Retry only `FAILED` rows, by `platformId` from the results endpoint, and only after the cause is fixed.
+- For performance questions use `/analytics/*` with an explicit window (step 14); `/results` is delivery status, not reach. A `null` metric means the platform does not report it.

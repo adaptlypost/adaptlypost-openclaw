@@ -1,6 +1,6 @@
 {
   "name": "@adaptlypost/openclaw-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AdaptlyPost plugin for OpenClaw: schedule and publish social posts to 9 platforms",
   "license": "MIT",
   "author": "AdaptlyPost <contact@adaptlypost.com> (https://adaptlypost.com)",

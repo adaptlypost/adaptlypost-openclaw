@@ -34,6 +34,32 @@ const PostStatus = Type.Union([
   Type.Literal("FAILED"),
 ]);
 
+const AnalyticsSortMetric = Type.Union([
+  Type.Literal("VIEWS"),
+  Type.Literal("LIKES"),
+  Type.Literal("COMMENTS"),
+  Type.Literal("SHARES"),
+  Type.Literal("SAVES"),
+  Type.Literal("CLICKS"),
+  Type.Literal("IMPRESSIONS"),
+  Type.Literal("ENGAGEMENT_RATE"),
+  Type.Literal("PUBLISHED_AT"),
+]);
+
+const AnalyticsRangeFields = {
+  from: Type.String({
+    description:
+      "Start of the reporting window, ISO 8601 (e.g. 2026-08-01). Metrics cover posts published between from and to; the comparison window is the same length just before from.",
+  }),
+  to: Type.String({ description: "End of the reporting window, ISO 8601. Not earlier than from." }),
+  platforms: Type.Optional(
+    Type.Array(Platform, {
+      description:
+        "Restrict to these platforms; omit for every platform with analytics. TWITTER has none and is ignored; LINKEDIN returns no data until LinkedIn approves analytics access.",
+    }),
+  ),
+};
+
 const ConnectionIdFields = {
   linkedinConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "LinkedIn connection ids." })),
   twitterConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "X (Twitter) connection ids." })),
@@ -124,7 +150,7 @@ export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
 
@@ -314,6 +340,45 @@ export default definePluginEntry({
         return jsonResult(
           await callApi(cfg(), "POST", `/social-posts/${encodeURIComponent(postId)}/retry`, {
             body: { platformIds },
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_analytics_overview",
+      label: "AdaptlyPost: analytics overview",
+      description:
+        "Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use it for 'how did we do this month' and follower questions. partialMetrics names metrics some selected platform cannot report; a metric no platform reports is null, so say so rather than reporting zero. Analytics cover the last 180 days and refresh every few hours (lastSyncedAt says when). Not for delivery status: adaptlypost_post_results answers 'did it publish', this answers 'how did it do'.",
+      parameters: Type.Object(AnalyticsRangeFields),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/analytics/overview", {
+            query: params as Record<string, unknown>,
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_post_analytics",
+      label: "AdaptlyPost: per-post analytics",
+      description:
+        "Per-post metrics for posts published inside a date window, sorted by a metric or by publish date, paginated. Use it for 'top posts', 'which post got the most comments' and 'how did post X do'. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Posts published outside AdaptlyPost are included with postId null. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review.",
+      parameters: Type.Object({
+        ...AnalyticsRangeFields,
+        sortBy: Type.Optional(AnalyticsSortMetric),
+        page: Type.Optional(Type.Integer({ minimum: 1, description: "Page number, from 1." })),
+        limit: Type.Optional(
+          Type.Integer({ minimum: 1, maximum: 100, description: "Posts per page, defaults to 20." }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/analytics/posts", {
+            query: params as Record<string, unknown>,
             signal,
           }),
         );

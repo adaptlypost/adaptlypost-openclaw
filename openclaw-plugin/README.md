@@ -42,10 +42,13 @@ account in the group.
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. |
+| `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
+| `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Six tools, not the twelve the API exposes. Post editing, deletion, draft
-publishing and bulk scheduling stay out, because an agent picking from a long
-list of near-identical tools picks worse. Those live in the
+Eight tools, not the eighteen the MCP server exposes. Post editing, deletion,
+draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
+per-platform breakdown, sync control) stay out, because an agent picking from
+a long list of near-identical tools picks worse. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
 
 ## Things worth knowing
@@ -65,6 +68,11 @@ Every platform publishes on its own. Read `adaptlypost_post_results` per
 platform rather than treating a post as one pass or fail. A platform
 restriction is that platform's decision about the account, and retrying will
 not clear it. A dead token or rejected media will.
+
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and
+YouTube for the last 180 days. X has no analytics here and LinkedIn's are
+waiting on LinkedIn's approval, so both come back empty. A `null` metric means
+the platform does not report it, which is not the same as zero.
 
 The API allows 600 requests per minute per token. A 429 comes back with
 `Retry-After` and the plugin surfaces it rather than hammering.

@@ -484,6 +484,159 @@ Compare with a timing-safe function, and reject timestamps that are far from now
 
 AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per attempt. After 20 consecutive failures the webhook is deactivated, which is why a receiver that has been down for a while goes quiet and stays quiet: reactivate it with `PATCH /webhooks/:id`.
 
+## Analytics
+
+Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`. `TWITTER` is ignored by every filter (X bills per post read), and `LINKEDIN` returns no data until LinkedIn approves the analytics products. Data reaches back 180 days at most, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far.
+
+Every window endpoint takes:
+
+- `from` (string, required): ISO 8601 start of the window
+- `to` (string, required): ISO 8601 end of the window, not earlier than `from`
+- `platforms` (PlatformType[], optional): repeat the key per value; omit for every covered platform
+
+Metrics count posts published inside the window. Every comparison uses the window of the same length immediately before `from`.
+
+### GET /analytics/overview
+
+```json
+{
+  "views": { "value": 48210, "previousValue": 39100, "deltaPercent": 23.3 },
+  "likes": { "value": 2210, "previousValue": 1980, "deltaPercent": 11.6 },
+  "comments": { "value": 340, "previousValue": 410, "deltaPercent": -17.1 },
+  "shares": { "value": 128, "previousValue": null, "deltaPercent": null },
+  "followers": { "value": 12980, "previousValue": 12410, "deltaPercent": 4.6 },
+  "postsCount": { "value": 42, "previousValue": 37, "deltaPercent": 13.5 },
+  "avgViewsPerPost": { "value": 1147.9, "previousValue": 1056.8, "deltaPercent": 8.6 },
+  "engagementRate": { "value": 5.55, "previousValue": 6.11, "deltaPercent": -9.2 },
+  "partialMetrics": ["shares"],
+  "lastSyncedAt": "2026-09-08T06:12:41.000Z"
+}
+```
+
+`followers` is the latest count as of `to`, compared with the count as of the end of the previous window. `engagementRate` is likes + comments + shares over views, as a percentage. `partialMetrics` lists metrics at least one selected platform cannot report, so their totals cover only the platforms that can; a metric no selected platform reports is `null`. `deltaPercent` is `null` when the previous value is 0 or unknown.
+
+### GET /analytics/timeseries
+
+Extra parameter: `granularity` (`DAILY`, the default, `WEEKLY` or `MONTHLY`).
+
+```json
+{
+  "points": [
+    { "date": "2026-08-01T00:00:00.000Z", "views": 1820, "likes": 90, "comments": 12, "shares": 4, "followers": 12420, "postsCount": 2, "engagementRate": 5.8 }
+  ]
+}
+```
+
+`date` is the start of the bucket in UTC. `followers` is the latest known count at the end of the bucket; the other counters sum posts published inside it.
+
+### GET /analytics/platform-breakdown
+
+Takes `from` and `to` only.
+
+```json
+{
+  "platforms": [
+    {
+      "platform": "INSTAGRAM",
+      "followers": { "value": 8210, "previousValue": 7990, "deltaPercent": 2.8 },
+      "views": { "value": 30100, "previousValue": 24800, "deltaPercent": 21.4 },
+      "likes": { "value": 1500, "previousValue": 1310, "deltaPercent": 14.5 },
+      "comments": { "value": 210, "previousValue": 260, "deltaPercent": -19.2 },
+      "shares": { "value": 128, "previousValue": 90, "deltaPercent": 42.2 },
+      "postsCount": { "value": 20, "previousValue": 18, "deltaPercent": 11.1 },
+      "avgViewsPerPost": { "value": 1505, "previousValue": 1377.8, "deltaPercent": 9.2 },
+      "engagementRate": { "value": 6.1, "previousValue": 6.7, "deltaPercent": -9 },
+      "supportedMetrics": ["followers", "views", "likes", "comments", "shares", "saves", "reach", "impressions"]
+    }
+  ]
+}
+```
+
+One row per platform with data in the workspace. Compare two platforms only on metrics both list in `supportedMetrics`.
+
+### GET /analytics/posts
+
+Extra parameters: `sortBy` (`VIEWS`, `LIKES`, `COMMENTS`, `SHARES`, `SAVES`, `CLICKS`, `IMPRESSIONS`, `ENGAGEMENT_RATE`, or `PUBLISHED_AT`, the default), `page` (from 1), `limit` (1-100, default 20).
+
+```json
+{
+  "posts": [
+    {
+      "id": "ap_01j9x…",
+      "postId": "cmm0z0k3q0000i0r5mxn0hfhs",
+      "postPlatformId": "cmm0z0k3u0001i0r5dlbfa440",
+      "platform": "INSTAGRAM",
+      "publishedAt": "2026-08-14T10:00:12.000Z",
+      "title": "Plan a week of posts in one sitting",
+      "thumbnailUrl": "https://…",
+      "permalink": "https://www.instagram.com/p/…",
+      "accountName": "adaptlypost",
+      "metrics": { "views": 9120, "likes": 410, "comments": 38, "shares": 22, "saves": 61, "clicks": null, "impressions": 10230, "reach": 8540, "engagementRate": 5.15 }
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 20,
+  "hasMore": true
+}
+```
+
+Includes posts published through AdaptlyPost and posts discovered on the accounts; discovered posts have `postId` and `postPlatformId` set to `null`. `postId` is the id for `GET /social-posts/:id`, and `postPlatformId` is the `platformId` from `/social-posts/:id/results`. A metric the platform does not report is `null`.
+
+### GET /analytics/top-posts
+
+Same rows as `/analytics/posts` without pagination: the top `limit` (1-50, default 10) ordered by `sortBy` (default `VIEWS`). Returns `{ "posts": [...] }`.
+
+### GET /analytics/discovered-posts
+
+Posts found on the connected accounts that AdaptlyPost did not publish, for a read-only calendar. Extra parameter: `limit` (1-1000, default 200).
+
+```json
+{
+  "posts": [
+    { "id": "ap_01j9x…", "platform": "TIKTOK", "publishedAt": "2026-08-20T17:30:00.000Z", "text": "…", "thumbnailUrl": "https://…", "permalink": "https://www.tiktok.com/@…", "accountName": "adaptlypost" }
+  ]
+}
+```
+
+### GET /analytics/sync-status
+
+No parameters.
+
+```json
+{
+  "accountGroupId": "ag_…",
+  "syncInProgress": false,
+  "lastSyncedAt": "2026-09-08T06:12:41.000Z",
+  "historyHorizonAt": "2026-03-12T00:00:00.000Z",
+  "platforms": [
+    {
+      "platform": "INSTAGRAM",
+      "connectionId": "cmlxmnxn20006hzpzvo291ckg",
+      "accountName": "adaptlypost",
+      "status": "IDLE",
+      "lastSyncedAt": "2026-09-08T06:12:41.000Z",
+      "lastErrorMessage": null,
+      "historyHorizonAt": "2026-03-12T00:00:00.000Z",
+      "lastDiscoveryAt": "2026-09-08T06:10:03.000Z",
+      "needsAnalyticsReconnect": false
+    }
+  ]
+}
+```
+
+`status` is `IDLE`, `QUEUED`, `SYNCING` or `FAILED`. `connectionId` is the account `id` from `/social-accounts`. Accounts on platforms without analytics are not listed. `needsAnalyticsReconnect: true` means the account was connected before the analytics permissions existed; it stays parked, with no syncs and no errors, until the user reconnects it (a connect link works) and approves the extra permissions.
+
+### POST /analytics/sync
+
+No body. Queues a sync for every covered account and re-reads the last 7 days. Analytics refresh on their own every few hours, so this is for "I just published" moments. One run per workspace every 10 minutes.
+
+```json
+{ "queued": false, "message": "Analytics were synced recently. Please try again in 412 seconds", "cooldownSecondsRemaining": 412 }
+```
+
+Inside the cooldown the response is still `200`; `queued` is `false` and `cooldownSecondsRemaining` says how long to wait. When queued, `cooldownSecondsRemaining` is `null`. The run is asynchronous: poll `GET /analytics/sync-status` until `syncInProgress` is `false`, then read the metrics again.
+
 ## Rate limits
 
 600 requests per minute per API token, counted on a hash of the token rather than on IP.
@@ -525,6 +678,15 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 
 **YouTubeLicense:**
 `youtube`, `creativeCommon`
+
+**AnalyticsGranularity:**
+`DAILY`, `WEEKLY`, `MONTHLY`
+
+**AnalyticsSortMetric:**
+`VIEWS`, `LIKES`, `COMMENTS`, `SHARES`, `SAVES`, `CLICKS`, `IMPRESSIONS`, `ENGAGEMENT_RATE`, `PUBLISHED_AT`
+
+**AnalyticsSyncJobStatus:**
+`IDLE`, `QUEUED`, `SYNCING`, `FAILED`
 
 ## Error Responses
 
