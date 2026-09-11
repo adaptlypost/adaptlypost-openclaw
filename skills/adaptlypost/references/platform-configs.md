@@ -29,20 +29,20 @@ For bulk scheduling, configs can be set at two levels:
 }
 ```
 
-| Parameter                | Type    | Required | Description                                                                       |
-| ------------------------ | ------- | -------- | --------------------------------------------------------------------------------- |
-| `connectionId`           | string  | **yes**  | TikTok account connection ID                                                      |
-| `privacyLevel`           | string  | **yes**  | `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY` |
-| `title`                  | string  | no       | Video title (max 90 chars)                                                        |
-| `caption`                | string  | no       | Extended caption (max 2,200 chars)                                                |
-| `allowComments`          | boolean | no       | Allow comments on the video                                                       |
-| `allowDuet`              | boolean | no       | Allow duets                                                                       |
-| `allowStitch`            | boolean | no       | Allow stitches                                                                    |
-| `sendAsDraft`            | boolean | no       | Save as draft in TikTok app                                                       |
-| `aiGenerated`            | boolean | no       | Mark content as AI-generated                                                      |
-| `brandedContent`         | boolean | no       | Sponsored/partnership content                                                     |
-| `brandedContentOwnBrand` | boolean | no       | Self-promotional content                                                          |
-| `autoAddMusic`           | boolean | no       | Auto-add background music                                                         |
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | TikTok account connection ID |
+| `privacyLevel` | string | **yes** | `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY` |
+| `title` | string | no | Video title (max 90 chars) |
+| `caption` | string | no | Extended caption (max 2,200 chars) |
+| `allowComments` | boolean | no | Allow comments on the video |
+| `allowDuet` | boolean | no | Allow duets |
+| `allowStitch` | boolean | no | Allow stitches |
+| `sendAsDraft` | boolean | no | Save as draft in TikTok app |
+| `aiGenerated` | boolean | no | Mark content as AI-generated |
+| `brandedContent` | boolean | no | Sponsored/partnership content |
+| `brandedContentOwnBrand` | boolean | no | Self-promotional content |
+| `autoAddMusic` | boolean | no | Auto-add background music |
 
 **Media notes:**
 
@@ -63,10 +63,10 @@ For bulk scheduling, configs can be set at two levels:
 }
 ```
 
-| Parameter      | Type   | Required | Description                                 |
-| -------------- | ------ | -------- | ------------------------------------------- |
-| `connectionId` | string | **yes**  | Instagram account connection ID             |
-| `postType`     | string | no       | `FEED`, `REEL`, or `STORY`. Default: `FEED` |
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | Instagram account connection ID |
+| `postType` | string | no | `FEED`, `REEL`, or `STORY`. Default: `FEED` |
 
 **Content types:**
 
@@ -93,11 +93,11 @@ For bulk scheduling, configs can be set at two levels:
 }
 ```
 
-| Parameter    | Type   | Required | Description                                  |
-| ------------ | ------ | -------- | -------------------------------------------- |
-| `pageId`     | string | **yes**  | Same value as in the top-level `pageIds` array (the Facebook account's `id` from `/social-accounts`) |
-| `postType`   | string | no       | `FEED`, `REEL`, or `STORY`. Default: `FEED`  |
-| `videoTitle` | string | no       | Video title (max 255 chars)                  |
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pageId` | string | **yes** | Same value as in the top-level `pageIds` array (the Facebook account's `id` from `/social-accounts`) |
+| `postType` | string | no | `FEED`, `REEL`, or `STORY`. Default: `FEED` |
+| `videoTitle` | string | no | Video title (max 255 chars) |
 
 **Content types:**
 
@@ -132,19 +132,19 @@ For bulk scheduling, configs can be set at two levels:
 }
 ```
 
-| Parameter           | Type     | Required | Description                                           |
-| ------------------- | -------- | -------- | ----------------------------------------------------- |
-| `connectionId`      | string   | **yes**  | YouTube channel connection ID                         |
-| `postType`          | string   | no       | `VIDEO` or `SHORTS`. Default: `VIDEO`                 |
-| `videoTitle`        | string   | no       | Video title (max 100 chars)                           |
-| `tags`              | string[] | no       | Video tags (max 20 tags)                              |
-| `privacyStatus`     | string   | no       | `public`, `private`, or `unlisted`. Default: `public` |
-| `license`           | string   | no       | `youtube` or `creativeCommon`                         |
-| `notifySubscribers` | boolean  | no       | Notify subscribers on publish                         |
-| `allowEmbedding`    | boolean  | no       | Allow embedding on other sites                        |
-| `madeForKids`       | boolean  | no       | COPPA compliance flag                                 |
-| `categoryId`        | string   | no       | YouTube category ID                                   |
-| `playlistId`        | string   | no       | Add to playlist after publishing                      |
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | YouTube channel connection ID |
+| `postType` | string | no | `VIDEO` or `SHORTS`. Default: `VIDEO` |
+| `videoTitle` | string | no | Video title (max 100 chars) |
+| `tags` | string[] | no | Video tags (max 20 tags) |
+| `privacyStatus` | string | no | `public`, `private`, or `unlisted`. Default: `public` |
+| `license` | string | no | `youtube` or `creativeCommon` |
+| `notifySubscribers` | boolean | no | Notify subscribers on publish |
+| `allowEmbedding` | boolean | no | Allow embedding on other sites |
+| `madeForKids` | boolean | no | COPPA compliance flag |
+| `categoryId` | string | no | YouTube category ID |
+| `playlistId` | string | no | Add to playlist after publishing |
 
 **Media notes:**
 
@@ -167,12 +167,12 @@ For bulk scheduling, configs can be set at two levels:
 }
 ```
 
-| Parameter      | Type   | Required | Description                                             |
-| -------------- | ------ | -------- | ------------------------------------------------------- |
-| `connectionId` | string | **yes**  | Pinterest account connection ID                         |
-| `boardId`      | string | **yes**  | Target board ID                                         |
-| `title`        | string | no       | Pin title (max 100 chars)                               |
-| `link`         | string | no       | Destination URL when pin is clicked (must be valid URL) |
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | Pinterest account connection ID |
+| `boardId` | string | **yes** | Target board ID |
+| `title` | string | no | Pin title (max 100 chars) |
+| `link` | string | no | Destination URL when pin is clicked (must be valid URL) |
 
 **Media notes:**
 

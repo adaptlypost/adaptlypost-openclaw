@@ -21,7 +21,10 @@ not reuse a token that other tools or people also hold.
     entries: {
       adaptlypost: {
         enabled: true,
-        config: { apiToken: "adaptly_..." }
+        config: {
+          apiToken: "adaptly_...",
+          mediaDirs: ["~/Pictures/social"]
+        }
       }
     }
   }
@@ -32,16 +35,59 @@ The token decides the account group, so you never pass an account id. Connect
 only the accounts the agent actually needs, since the token reaches every
 account in the group.
 
+`mediaDirs` lists the folders the agent may upload local files from. Leave it
+out and only URL uploads work. Don't point it at your home folder; the plugin
+refuses that, and the filesystem root too.
+
+## Approvals
+
+Four actions put something in public, so each one stops for your approval
+before it runs:
+
+- uploading media, since a stored file gets a public URL right away
+- scheduling a post
+- publishing a post now
+- retrying failed platforms, which republishes immediately
+
+The prompt shows everything that will go public: each file with its full path
+or URL, each account by name, the timing, each platform's visibility and title,
+and every caption including per-platform overrides. OpenClaw caps a prompt at
+512 characters. When a call doesn't fit, the plugin refuses it instead of
+cutting anything, and tells the agent to save a draft or split the call. The
+prompt offers "allow once" and "deny", never "always". The plugin ties each approval
+to one tool call and a hash of its exact arguments, so a changed or replayed
+call is refused. Saving a draft needs no approval.
+
+When nobody can answer (a cron run, or a channel without approval support),
+OpenClaw denies the call. Unattended agents can still save drafts. To get the
+prompts in a chat channel, set `approvals.plugin` in your OpenClaw config; see
+OpenClaw's plugin permission requests docs.
+
+## What the plugin refuses
+
+- API calls go only to `https://post.adaptlypost.com/post/api/v1`. The base URL
+  is fixed in code and redirects are not followed, so the token cannot be sent
+  anywhere else.
+- Local uploads must resolve, symlinks included, to a file inside `mediaDirs`.
+  Hidden files and folders are skipped, and a file must really be a JPEG, PNG,
+  WebP, MP4 or QuickTime file. The plugin checks its first bytes, not just the
+  name. The size limit is 50 MB per image and 1 GB per video.
+- URL uploads must be `https://` on port 443 without credentials. The plugin
+  checks the addresses each connection actually uses, including after each of
+  up to three redirects, against the loopback, private, link-local, CGNAT,
+  multicast and reserved ranges, so DNS rebinding cannot slip past it. Downloads stop at
+  250 MB or two minutes.
+
 ## Tools
 
 | tool | what it does |
 |---|---|
 | `adaptlypost_accounts` | List connected accounts and their connection ids. Call this first. |
-| `adaptlypost_upload_media` | Upload local files or remote URLs, returns public media URLs. |
-| `adaptlypost_create_post` | Create, schedule, or draft one post across any set of accounts. |
+| `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
+| `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
-| `adaptlypost_retry_failed` | Retry only the platforms that failed. |
+| `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 

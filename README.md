@@ -2,10 +2,9 @@
 
 Schedule and manage social media posts across 9 platforms — Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, and YouTube — from a single API, and read how they performed. AdaptlyPost is a SaaS tool: no self-hosting required.
 
-This repo ships one skill in two layouts so it works with both **OpenClaw** and **Hermes Agent**:
+The same skill file sits in two places, because OpenClaw and Hermes Agent look for it in different folders. OpenClaw reads `SKILL.md` at the repo root. Hermes reads `skills/adaptlypost/SKILL.md`.
 
-- `SKILL.md` (repo root) — picked up by OpenClaw
-- `skills/adaptlypost/SKILL.md` — standard layout for Hermes taps and installs
+For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typed tools. It asks for approval in code before every upload, scheduled post, live post and retry, so prefer it over the curl skill when you run OpenClaw.
 
 ## Prerequisites
 
@@ -76,7 +75,7 @@ See [adaptlypost/adaptlypost-mcp](https://github.com/adaptlypost/adaptlypost-mcp
 
 ```bash
 cp SKILL.md skills/adaptlypost/SKILL.md
-rm -rf skills/adaptlypost/references && cp -R references skills/adaptlypost/references
+cp references/*.md skills/adaptlypost/references/
 ```
 
 ## License

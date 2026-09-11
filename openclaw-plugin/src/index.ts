@@ -8,6 +8,16 @@ import {
   uploadRemoteUrl,
   type PluginConfig,
 } from "./api.js";
+import {
+  APPROVAL_TIMEOUT_MS,
+  ApprovalLedger,
+  buildPostBody,
+  CREATE_POST_TOOL,
+  describeApproval,
+  GATED_TOOLS,
+  RETRY_TOOL,
+  UPLOAD_TOOL,
+} from "./approvals.js";
 
 const Platform = Type.Union(
   [
@@ -153,6 +163,39 @@ export default definePluginEntry({
     "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
+    const approvals = new ApprovalLedger();
+
+    api.on(
+      "before_tool_call",
+      async (event) => {
+        let approval;
+        try {
+          approval = await describeApproval(cfg(), event.toolName, event.params);
+        } catch (error) {
+          return { block: true, blockReason: error instanceof Error ? error.message : String(error) };
+        }
+        if (!approval) return;
+
+        const { toolCallId, toolName, params } = event;
+        if (!toolCallId) {
+          return {
+            block: true,
+            blockReason: `${toolName} needs a human approval, and this run gives no tool call id to bind it to. Nothing was uploaded or published.`,
+          };
+        }
+        return {
+          requireApproval: {
+            ...approval,
+            allowedDecisions: ["allow-once", "deny"],
+            timeoutMs: APPROVAL_TIMEOUT_MS,
+            onResolution(decision) {
+              if (decision === "allow-once") approvals.grant(toolCallId, params);
+            },
+          },
+        };
+      },
+      { matcher: GATED_TOOLS },
+    );
 
     api.registerTool({
       name: "adaptlypost_accounts",
@@ -166,21 +209,26 @@ export default definePluginEntry({
     });
 
     api.registerTool({
-      name: "adaptlypost_upload_media",
+      name: UPLOAD_TOOL,
       label: "AdaptlyPost: upload media",
       description:
-        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Two sources, combinable in one call: file_paths (files on disk) and urls (public URLs the plugin downloads and re-hosts). Omitting both returns an error. Accepts jpeg, png, webp, mp4 and quicktime, judged by file extension. Stored files are public immediately, post or no post, so confirm each file with the user first. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.",
+        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content. Limits: 50 MB per image, 1 GB per local video, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.",
       parameters: Type.Object({
         file_paths: Type.Optional(
-          Type.Array(Type.String(), { description: "Absolute or relative paths to files on disk." }),
+          Type.Array(Type.String(), {
+            description:
+              "Absolute paths inside a configured mediaDirs folder, or paths relative to the first mediaDirs folder.",
+          }),
         ),
         urls: Type.Optional(
           Type.Array(Type.String(), {
-            description: "Public URLs to fetch and re-host. AdaptlyPost will not post media it does not store.",
+            description:
+              "Public https URLs to download and re-host. AdaptlyPost will not post media it does not store.",
           }),
         ),
       }),
-      async execute(_toolCallId, params, signal) {
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, UPLOAD_TOOL, params);
         const { file_paths: filePaths = [], urls = [] } = params as {
           file_paths?: string[];
           urls?: string[];
@@ -203,10 +251,10 @@ export default definePluginEntry({
     });
 
     api.registerTool({
-      name: "adaptlypost_create_post",
+      name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms: publish now, schedule, or save a draft. Omit scheduledAt to publish immediately; a future scheduledAt sets status SCHEDULED; saveAsDraft stores it as DRAFT for review in the AdaptlyPost app. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -228,10 +276,14 @@ export default definePluginEntry({
             description: "publicUrl values returned by adaptlypost_upload_media.",
           }),
         ),
+        mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
+          description:
+            "DRAFT: save without publishing. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",
+        }),
         scheduledAt: Type.Optional(
           Type.String({
             description:
-              "Absolute ISO 8601 instant. Omit to publish immediately; a past time also publishes immediately.",
+              "Absolute ISO 8601 instant in the future. Required with mode SCHEDULE, rejected with the other modes.",
           }),
         ),
         timezone: Type.Optional(
@@ -240,18 +292,14 @@ export default definePluginEntry({
               "IANA timezone stored with the post for display, defaults to UTC; it does not shift scheduledAt.",
           }),
         ),
-        saveAsDraft: Type.Optional(
-          Type.Boolean({
-            description:
-              "Store as DRAFT without publishing or scheduling; the user publishes it from the AdaptlyPost app.",
-          }),
-        ),
         thumbnailUrl: Type.Optional(Type.String({ description: "Custom thumbnail for video posts." })),
         ...ConnectionIdFields,
         ...PlatformConfigFields,
       }),
-      async execute(_toolCallId, params, signal) {
-        return jsonResult(await callApi(cfg(), "POST", "/social-posts", { body: params, signal }));
+      async execute(toolCallId, params, signal) {
+        const body = buildPostBody(params as Record<string, unknown>);
+        if ((params as { mode: string }).mode !== "DRAFT") approvals.consume(toolCallId, CREATE_POST_TOOL, params);
+        return jsonResult(await callApi(cfg(), "POST", "/social-posts", { body, signal }));
       },
     });
 
@@ -321,10 +369,10 @@ export default definePluginEntry({
     });
 
     api.registerTool({
-      name: "adaptlypost_retry_failed",
+      name: RETRY_TOOL,
       label: "AdaptlyPost: retry failed platforms",
       description:
-        "Re-queue publishing for a post's FAILED platforms. Only rows with status FAILED whose id is in platform_ids are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with 'No failed platforms to retry'. The post moves to PUBLISHING and the retry is asynchronous, so check adaptlypost_post_results for the outcome. Get platform_ids (not platform names) and each errorMessage from adaptlypost_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform restriction, which repeated retries make worse. Content cannot change on retry.",
+        "Re-queue publishing for a post's FAILED platforms. It republishes immediately, so every call pauses for the user's approval. Only rows with status FAILED whose id is in platform_ids are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with 'No failed platforms to retry'. The post moves to PUBLISHING and the retry is asynchronous, so check adaptlypost_post_results for the outcome. Get platform_ids (not platform names) and each errorMessage from adaptlypost_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform restriction, which repeated retries make worse. Content cannot change on retry.",
       parameters: Type.Object({
         post_id: Type.String({ description: "Post id whose platforms failed." }),
         platform_ids: Type.Array(Type.String(), {
@@ -332,7 +380,8 @@ export default definePluginEntry({
           description: "platformId values of FAILED rows from adaptlypost_post_results, not platform names.",
         }),
       }),
-      async execute(_toolCallId, params, signal) {
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, RETRY_TOOL, params);
         const { post_id: postId, platform_ids: platformIds } = params as {
           post_id: string;
           platform_ids: string[];

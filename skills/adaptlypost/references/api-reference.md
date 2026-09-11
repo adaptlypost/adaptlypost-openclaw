@@ -413,7 +413,7 @@ Rather than polling `GET /social-posts` to find out whether something published,
 ### Events
 
 | event | fires when |
-|---|---|
+| --- | --- |
 | `post.scheduled` | A post is accepted onto the schedule |
 | `post.published` | Every targeted platform published |
 | `post.partially_failed` | Some platforms published and some failed |
@@ -463,7 +463,7 @@ Sends a `webhook.test` event to the registered URL so you can verify signature c
 Each request carries four headers:
 
 | header | contents |
-|---|---|
+| --- | --- |
 | `x-adaptly-signature` | `sha256=<hex>` |
 | `x-adaptly-timestamp` | Unix timestamp used in the signature |
 | `x-adaptly-event` | Event name, for example `post.published` |
