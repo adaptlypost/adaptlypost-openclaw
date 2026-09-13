@@ -201,10 +201,30 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_check_account",
+      label: "AdaptlyPost: re-check an account",
+      description:
+        "Ask the platform right now whether a connected account's stored token still works, and return its fresh status. Facebook pages only (other platforms return 400). Use it after the user says they reconnected a page that adaptlypost_accounts listed as unauthorized, or when a post failed with a token error and you want to confirm the page is back before scheduling to it again. Returns { id, platform, displayName, pageId, status, unauthorizedReason, checkedAt }; a rejected token marks the page unauthorized, a working token clears an earlier mark. Pages are also re-checked automatically twice a day, so do not poll this.",
+      parameters: Type.Object({
+        account_id: Type.String({
+          description: "The account id from adaptlypost_accounts (or the Facebook pageId).",
+        }),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const { account_id: accountId } = params as { account_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/social-accounts/${encodeURIComponent(accountId)}/check`, {
+            signal,
+          }),
+        );
       },
     });
 

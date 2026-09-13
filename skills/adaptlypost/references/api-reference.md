@@ -21,7 +21,8 @@ List all connected social media accounts for the account group tied to this API 
       "platform": "INSTAGRAM",
       "displayName": "John Doe",
       "username": "johndoe",
-      "avatarUrl": "https://..."
+      "avatarUrl": "https://...",
+      "status": "active"
     },
     {
       "id": "cmlxmnxn20006hzpzvo291abc",
@@ -29,6 +30,8 @@ List all connected social media accounts for the account group tied to this API 
       "displayName": "My Business Page",
       "username": "",
       "avatarUrl": "",
+      "status": "unauthorized",
+      "unauthorizedReason": "This Page access token belongs to a Page that is not accessible.",
       "pageId": "123456789012345"
     }
   ]
@@ -43,6 +46,27 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 - For Facebook, the `id` field is what you pass in `pageIds` when creating posts. The extra `pageId` field is the page's public ID on facebook.com — informational only (shown since pages have no `username`), do NOT pass it as an identifier
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
+- `status` is `active` or `unauthorized`. An unauthorized account stays listed but the platform rejected its token (a locked Facebook profile, a security checkpoint, a page the user lost access to). `POST /social-posts` refuses it with a 400 until the user reconnects it in the dashboard, so skip it when scheduling and tell the user to reconnect. `unauthorizedReason` is the platform's own message. Registered webhooks receive `account.unauthorized` the moment this happens
+
+### POST /social-accounts/:id/check
+
+Asks Facebook whether the page token still works, right now. Pages are also checked automatically twice a day. `:id` is the account `id` from `/social-accounts` or the Facebook `pageId`. Facebook pages only; other platforms return 400.
+
+**Response:**
+
+```json
+{
+  "id": "cmlxmnxn20006hzpzvo291abc",
+  "platform": "FACEBOOK",
+  "displayName": "My Business Page",
+  "pageId": "123456789012345",
+  "status": "unauthorized",
+  "unauthorizedReason": "This Page access token belongs to a Page that is not accessible.",
+  "checkedAt": "2026-09-13T09:10:00.000Z"
+}
+```
+
+A rejected token marks the page `unauthorized` and fires `account.unauthorized`; a working token clears an earlier mark. Use it before a scheduling run when the user has just reconnected, or when a post failed with a token error and you want to confirm the page is back.
 
 ### POST /social-posts
 
@@ -418,6 +442,7 @@ Rather than polling `GET /social-posts` to find out whether something published,
 | `post.published` | Every targeted platform published |
 | `post.partially_failed` | Some platforms published and some failed |
 | `post.failed` | Every platform failed |
+| `account.unauthorized` | Facebook rejected an account's token; `data.account` carries the account `id`, `pageId`, `status: "unauthorized"` and the platform's `reason`. The account stays on `/social-accounts` with `status: "unauthorized"` until reconnected |
 
 ### POST /api/v1/webhooks
 

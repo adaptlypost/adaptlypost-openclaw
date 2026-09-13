@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.5.0
+version: 1.6.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -77,7 +77,9 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-accounts
 ```
 
-Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl" }] }`. Save the `id` — you'll use it as a connection ID when creating posts. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field, the page's public ID on facebook.com, shown because pages have no `username`. `pageIds` accepts either that `pageId` or the account `id`, so both work.
+Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl", "status" }] }`. Save the `id` — you'll use it as a connection ID when creating posts.
+
+`status` is `active` or `unauthorized`. An `unauthorized` account is still listed but its platform rejected the stored token (a locked Facebook profile, a security checkpoint, a page the user lost access to); `unauthorizedReason` carries the platform's message. Do not schedule to it: `POST /social-posts` refuses it with `400`. Tell the user to reconnect it in the AdaptlyPost dashboard. Once they say they have, or when a post failed with a token error and you want to confirm the page is back, run `POST /social-accounts/:id/check` to re-probe the platform now; it returns the fresh `status`. Facebook pages are also re-checked automatically twice a day. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field, the page's public ID on facebook.com, shown because pages have no `username`. `pageIds` accepts either that `pageId` or the account `id`, so both work.
 
 ### 2. Publish a post immediately (no scheduling)
 
@@ -322,7 +324,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
   -d '{"url": "https://example.com/hooks/adaptlypost"}'
 ```
 
-Events are `post.scheduled`, `post.published`, `post.partially_failed` and `post.failed`.
+Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.failed` and `account.unauthorized` (a connected account's token stopped working; `data.account` names it).
 
 The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 
