@@ -81,6 +81,7 @@ Create or schedule a post to one or more social media platforms.
   "text": "Post text with #hashtags",
   "platformTexts": [{ "platform": "TWITTER", "text": "Short version for X" }],
   "mediaUrls": ["https://cdn.adaptlypost.com/social-media-posts/uuid/photo.jpg"],
+  "mediaAltTexts": ["A red bicycle leaning on a brick wall"],
   "thumbnailUrl": "https://cdn.adaptlypost.com/social-media-posts/uuid/thumb.jpg",
   "scheduledAt": "2026-06-15T10:00:00.000Z",
   "timezone": "America/New_York",
@@ -107,6 +108,7 @@ Create or schedule a post to one or more social media platforms.
 - `text` (string): Default post text for all platforms
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`
 - `mediaUrls` (string[]): Public URLs of uploaded media files
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
@@ -274,6 +276,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
 - `mediaUrls` (string[]): Media file URLs
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs` — when set on a post item, these override the batch-level configs for that specific post

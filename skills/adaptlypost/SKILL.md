@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.6.1
+version: 1.7.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -191,6 +191,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
     "contentType": "IMAGE",
     "text": "Post with image!",
     "mediaUrls": ["PUBLIC_URL_FROM_STEP_A"],
+    "mediaAltTexts": ["A red bicycle leaning on a brick wall"],
     "timezone": "America/New_York",
     "scheduledAt": "2026-06-15T10:00:00.000Z",
     "instagramConnectionIds": ["CONNECTION_ID_HERE"]
@@ -199,6 +200,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
 For carousel: upload multiple files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`.
+For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube and videos ignore it.
 
 ### 6. List posts
 
