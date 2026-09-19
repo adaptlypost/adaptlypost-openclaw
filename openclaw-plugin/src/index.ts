@@ -296,6 +296,12 @@ export default definePluginEntry({
             description: "publicUrl values returned by adaptlypost_upload_media.",
           }),
         ),
+        mediaAltTexts: Type.Optional(
+          Type.Array(Type.String({ maxLength: 1000 }), {
+            description:
+              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
+          }),
+        ),
         mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
           description:
             "DRAFT: save without publishing. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",

@@ -240,6 +240,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
   const publishNow = params.mode === "PUBLISH_NOW";
   const title = `${publishNow ? "Publish now" : "Schedule a post"} to ${targets.length} account${targets.length === 1 ? "" : "s"}`;
   const media = stringArray(params.mediaUrls).map(fileName);
+  const altTextCount = stringArray(params.mediaAltTexts).filter((altText) => altText.trim()).length;
   const lines = [
     publishNow
       ? "Publishes immediately and cannot be recalled."
@@ -247,6 +248,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
     `Accounts: ${targets.join(", ")}`,
     ...settingLines(params),
     ...(media.length ? [`Media: ${media.join(", ")}`] : []),
+    ...(altTextCount ? [`Alt text on ${altTextCount} of ${media.length} images`] : []),
     ...(nonEmpty(params.thumbnailUrl) ? [`Thumbnail: ${fileName(params.thumbnailUrl)}`] : []),
     ...textLines(params),
   ];
