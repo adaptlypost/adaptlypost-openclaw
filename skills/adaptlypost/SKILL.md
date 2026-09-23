@@ -30,7 +30,7 @@ The [AdaptlyPost OpenClaw plugin](https://github.com/adaptlypost/adaptlypost-ope
 ## Setup
 
 1. Sign up at https://adaptlypost.com/signup
-2. Go to Settings → API Tokens → generate a **dedicated, revocable** API token for this agent — do not reuse a token that is also used by other tools or humans.
+2. Go to Settings → API Tokens → generate a **dedicated, revocable** API token for this agent — do not reuse a token that is also used by other tools or humans. Pick its role there: **Contributor** for an agent that drafts and a human publishes, **Editor** only when the agent itself must schedule or publish. See [Roles and what the key may do](#roles-and-what-the-key-may-do).
 3. Connect only the social accounts the agent actually needs. The token has delegated access to every account in the group, so a smaller group = smaller blast radius.
 4. Set the environment variable:
    ```bash
@@ -45,6 +45,42 @@ Auth header: `Authorization: Bearer $ADAPTLYPOST_API_KEY`
 Rate limit: 600 requests per minute per token. Every response carries `RateLimit-Remaining` and `RateLimit-Reset`; a `429` adds `Retry-After` in seconds. Wait it out instead of retrying straight away.
 
 `GET /openapi.json` is public and needs no token, so automation platforms can import the spec.
+
+## Roles and what the key may do
+
+A key carries the workspace role chosen when it was created, and never does more than the member who created it: if that member is demoted the key shrinks, if they leave the workspace the key stops working. Read the key in hand before the first write call, once per session:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  https://post.adaptlypost.com/post/api/v1/me
+```
+
+Returns `{ "tokenType", "tokenId", "tokenName", "workspace": { "id", "name" }, "organizationId", "role": { "key", "name" }, "issuerRole", "permissions": [...], "can": { "draft", "schedule", "publish" }, "summary", "expiresAt" }`. It works for every valid key. `can` is the short answer; `permissions` is the full list.
+
+| Role | Can | Cannot |
+| --- | --- | --- |
+| `admin` | Everything, including connecting accounts and connect links | — |
+| `editor` | Create, schedule, publish, retry, edit and delete any post; upload media; manage webhooks | Connect or disconnect accounts, create connect links |
+| `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, delete anything but its own drafts, touch other members' posts, manage webhooks |
+| `viewer` | Read posts, accounts, analytics, webhooks | Any write |
+
+With `can.schedule` or `can.publish` false, every post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
+
+A call the role does not cover answers `403` with this body:
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "code": "permission_denied",
+  "requiredPermission": "posts.publish",
+  "role": "contributor",
+  "tokenType": "api_token",
+  "message": "The Contributor role cannot publish posts. Send the post with saveAsDraft: true and ask a workspace member to publish it."
+}
+```
+
+On `permission_denied`: stop. Do not retry, do not look for another key, do not work around it with a different endpoint. Show the user `message` and `requiredPermission`; for a post, save it as a draft instead. A `403` with `code: subscription_required` means the workspace plan is not active, which the user fixes in the app. A `401` with `code: token_issuer_lost_access` means the member who created the key lost access to the workspace and the key is revoked: ask the user for a new key.
 
 ## Safety rules — read before any write call
 
@@ -66,7 +102,8 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
 5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop.
 6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing.
 7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Deleting a webhook silently stops the notifications someone else may rely on.
-8. **Connect links are secrets.** Only create one when the user asks for it, give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected.
+8. **Connect links are secrets.** Only create one when the user asks for it, give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
+9. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect.
 
 ## Core Workflow
 
@@ -83,7 +120,7 @@ Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUr
 
 ### 2. Publish a post immediately (no scheduling)
 
-⚠️ **Immediate publish is irreversible from the agent's side** — once `POST /social-posts` returns, the content is live on the user's connected accounts. Only call this after the four-item confirmation in [Safety rules](#safety-rules--read-before-any-write-call).
+⚠️ **Immediate publish is irreversible from the agent's side** — once `POST /social-posts` returns, the content is live on the user's connected accounts. Only call this after the four-item confirmation in [Safety rules](#safety-rules--read-before-any-write-call). It needs a key whose `can.publish` is true (Editor or Admin); a Contributor key gets `403 permission_denied` and should save a draft instead.
 
 To publish right away, simply **omit `scheduledAt` entirely** and do NOT set `saveAsDraft`:
 
@@ -322,7 +359,7 @@ Never ask a user for a social platform password. This endpoint exists so you nev
 
 ### 13. Get notified instead of polling
 
-Register a webhook once and stop asking whether a post published. Only register a URL the user gave you:
+Register a webhook once and stop asking whether a post published. Only register a URL the user gave you. Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
@@ -447,6 +484,7 @@ Upload 1-20 files per request.
 
 ### API workflow
 
+- Call `/me` once per session. If `can.schedule` or `can.publish` is false, do not offer to schedule or publish: save drafts and say who has to publish them.
 - Always call `/social-accounts` first to get valid connection IDs for each platform.
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.
@@ -463,3 +501,4 @@ Upload 1-20 files per request.
 - Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.
 - Retry only `FAILED` rows, by `platformId` from the results endpoint, and only after the cause is fixed.
 - For performance questions use `/analytics/*` with an explicit window (step 14); `/results` is delivery status, not reach. A `null` metric means the platform does not report it.
+- On `403 permission_denied`, stop and report `message` and `requiredPermission`. A retry, another key of the same role or another endpoint gets the same answer.

@@ -35,6 +35,17 @@ The token decides the account group, so you never pass an account id. Connect
 only the accounts the agent actually needs, since the token reaches every
 account in the group.
 
+The token also carries a role, chosen when you create it, and never does more
+than you can. A Contributor token lets the agent draft and upload but not
+schedule, publish or retry; give it an Editor token only when the agent itself
+must publish. The plugin reads `GET /me` once per token before it asks you to
+approve a scheduled or live post. When the token cannot do what the agent asked,
+the prompt says so up front and approving saves the post as a draft instead, for
+you to publish in the AdaptlyPost app. A retry with such a token is refused
+before it reaches you. When AdaptlyPost itself answers `403 permission_denied`,
+the agent sees the server's message, the missing permission and the token's
+role, and is told to stop rather than retry.
+
 `mediaDirs` lists the folders the agent may upload local files from. Leave it
 out and only URL uploads work. Don't point it at your home folder; the plugin
 refuses that, and the filesystem root too.

@@ -88,16 +88,117 @@ export async function callApi(
         `AdaptlyPost rate limit reached (600 requests per minute per token).${retryAfter ? ` Retry after ${retryAfter}s.` : ""} Wait rather than retrying immediately.`,
       );
     }
-    const message =
-      typeof parsed === "object" && parsed !== null && "message" in parsed
-        ? String((parsed as { message: unknown }).message)
-        : typeof parsed === "string"
-          ? parsed
-          : JSON.stringify(parsed);
-    throw new Error(`AdaptlyPost API ${res.status}: ${message}`);
+    if (res.status === 401 || res.status === 403) meByToken.delete(token);
+    throw new AdaptlyPostApiError(res.status, parsed);
   }
 
   return parsed;
+}
+
+type ErrorBody = {
+  message?: unknown;
+  code?: unknown;
+  requiredPermission?: unknown;
+  role?: unknown;
+};
+
+function errorBody(parsed: unknown): ErrorBody {
+  return typeof parsed === "object" && parsed !== null ? (parsed as ErrorBody) : {};
+}
+
+function errorMessage(parsed: unknown): string {
+  const { message } = errorBody(parsed);
+  if (Array.isArray(message)) return message.map(String).join("; ");
+  if (message !== undefined) return String(message);
+  return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
+}
+
+export class AdaptlyPostApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly requiredPermission?: string;
+  readonly role?: string;
+
+  constructor(status: number, parsed: unknown) {
+    const body = errorBody(parsed);
+    const code = typeof body.code === "string" ? body.code : undefined;
+    const requiredPermission = typeof body.requiredPermission === "string" ? body.requiredPermission : undefined;
+    const role = typeof body.role === "string" ? body.role : undefined;
+    super(describeApiError(status, code, errorMessage(parsed), requiredPermission, role));
+    this.name = "AdaptlyPostApiError";
+    this.status = status;
+    this.code = code;
+    this.requiredPermission = requiredPermission;
+    this.role = role;
+  }
+}
+
+function describeApiError(
+  status: number,
+  code: string | undefined,
+  message: string,
+  requiredPermission: string | undefined,
+  role: string | undefined,
+): string {
+  switch (code) {
+    case "permission_denied":
+      return [
+        `AdaptlyPost refused this call (403 permission_denied): ${message}`,
+        requiredPermission ? `Required permission: ${requiredPermission}.` : "",
+        role ? `This key has the ${role} role.` : "",
+        "Stop here: a retry or another key of the same role gets the same answer. For a post, save it with mode DRAFT so a workspace member can publish it; otherwise tell the user which permission the key lacks so they can create a key with a role that holds it.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    case "token_issuer_lost_access":
+      return `AdaptlyPost rejected the key (401 token_issuer_lost_access): ${message} Stop and ask the user for a new key from a workspace member who still has access.`;
+    case "subscription_required":
+      return `AdaptlyPost refused this call (403 subscription_required): ${message} Retrying will not help; the user has to update the workspace subscription.`;
+    default:
+      return `AdaptlyPost API ${status}: ${message}`;
+  }
+}
+
+export type KeyCapabilities = {
+  tokenType: string;
+  tokenName?: string | null;
+  workspace: { id: string; name?: string | null };
+  role: { key: string; name: string };
+  issuerRole?: string | null;
+  permissions: string[];
+  can: { draft: boolean; schedule: boolean; publish: boolean };
+  summary: string;
+  expiresAt?: string | null;
+};
+
+const meByToken = new Map<string, KeyCapabilities>();
+
+function isKeyCapabilities(value: unknown): value is KeyCapabilities {
+  const me = value as KeyCapabilities | null;
+  return (
+    typeof me === "object" &&
+    me !== null &&
+    typeof me.role?.key === "string" &&
+    typeof me.role?.name === "string" &&
+    typeof me.can?.schedule === "boolean" &&
+    typeof me.can?.publish === "boolean"
+  );
+}
+
+/** What the configured key may do, read from GET /me once per token. Undefined when the lookup fails. */
+export async function keyCapabilities(cfg: PluginConfig, signal?: AbortSignal): Promise<KeyCapabilities | undefined> {
+  const token = cfg.apiToken ?? "";
+  const cached = meByToken.get(token);
+  if (cached) return cached;
+  let me: unknown;
+  try {
+    me = await callApi(cfg, "GET", "/me", { signal });
+  } catch {
+    return undefined;
+  }
+  if (!isKeyCapabilities(me)) return undefined;
+  meByToken.set(token, me);
+  return me;
 }
 
 const MIME_BY_EXT: Record<string, string> = {

@@ -3,8 +3,10 @@ import {
   callApi,
   describeLocalMedia,
   describeRemoteUrl,
+  keyCapabilities,
   parseRemoteUrl,
   resolveLocalMedia,
+  type KeyCapabilities,
   type PluginConfig,
 } from "./api.js";
 
@@ -21,12 +23,18 @@ const DESCRIPTION_LIMIT = 512;
 
 export type PostMode = "DRAFT" | "SCHEDULE" | "PUBLISH_NOW";
 
+export type ApprovalFallback = "draft";
+
 export type ApprovalRequest = {
   title: string;
   description: string;
   severity: "info" | "warning" | "critical";
   scope: { kind: "external-post"; target: string; visibility: "public" | "restricted" };
+  /** What an approval runs instead of the call as asked, when the key cannot run it as asked. */
+  fallback?: ApprovalFallback;
 };
+
+export type ApprovalGrant = { fallback?: ApprovalFallback };
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -44,13 +52,13 @@ function digest(params: unknown): string {
 }
 
 export class ApprovalLedger {
-  private readonly grants = new Map<string, { digest: string; expiresAt: number }>();
+  private readonly grants = new Map<string, { digest: string; expiresAt: number; fallback?: ApprovalFallback }>();
 
-  grant(toolCallId: string, params: unknown): void {
-    this.grants.set(toolCallId, { digest: digest(params), expiresAt: Date.now() + GRANT_TTL_MS });
+  grant(toolCallId: string, params: unknown, fallback?: ApprovalFallback): void {
+    this.grants.set(toolCallId, { digest: digest(params), expiresAt: Date.now() + GRANT_TTL_MS, fallback });
   }
 
-  consume(toolCallId: string, toolName: string, params: unknown): void {
+  consume(toolCallId: string, toolName: string, params: unknown): ApprovalGrant {
     const grant = this.grants.get(toolCallId);
     this.grants.delete(toolCallId);
     for (const [id, entry] of this.grants) {
@@ -66,6 +74,7 @@ export class ApprovalLedger {
         `${toolName} arguments changed after approval, so the call was refused. Nothing was uploaded or published.`,
       );
     }
+    return { fallback: grant.fallback };
   }
 }
 
@@ -221,12 +230,22 @@ function requireFullPrompt(title: string, lines: string[], ifTooLong: string): s
   return description;
 }
 
+function refusedAction(me: KeyCapabilities | undefined, publishNow: boolean): string | undefined {
+  if (!me) return undefined;
+  if (publishNow && !me.can.publish) return "publish";
+  if (!publishNow && !me.can.schedule) return "schedule";
+  return undefined;
+}
+
 async function describePost(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest | undefined> {
   const body = buildPostBody(params);
   if (params.mode === "DRAFT") return undefined;
 
   const platforms = stringArray(params.platforms);
-  const names = await fetchAccountNames(cfg);
+  const [names, me] = await Promise.all([
+    fetchAccountNames(cfg),
+    keyCapabilities(cfg, AbortSignal.timeout(LOOKUP_TIMEOUT_MS)),
+  ]);
   const targets = platforms.flatMap((platform) =>
     stringArray(params[CONNECTION_FIELDS[platform] ?? ""]).map((id) => {
       const name = names.get(id);
@@ -241,13 +260,20 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
   if (!targets.length) throw new Error("No connection ids were given for the selected platforms. Nothing was published.");
 
   const publishNow = params.mode === "PUBLISH_NOW";
-  const title = `${publishNow ? "Publish now" : "Schedule a post"} to ${targets.length} account${targets.length === 1 ? "" : "s"}`;
+  const refused = refusedAction(me, publishNow);
+  const accountCount = `${targets.length} account${targets.length === 1 ? "" : "s"}`;
+  const title = refused
+    ? `Key cannot ${refused}: save as draft for ${accountCount}?`
+    : `${publishNow ? "Publish now" : "Schedule a post"} to ${accountCount}`;
   const media = stringArray(params.mediaUrls).map(fileName);
   const altTextCount = stringArray(params.mediaAltTexts).filter((altText) => altText.trim()).length;
+  const timing = publishNow
+    ? "Publishes immediately and cannot be recalled."
+    : `Scheduled for ${String(body.scheduledAt)}${nonEmpty(params.timezone) ? ` (${params.timezone})` : ""}.`;
   const lines = [
-    publishNow
-      ? "Publishes immediately and cannot be recalled."
-      : `Scheduled for ${String(body.scheduledAt)}${nonEmpty(params.timezone) ? ` (${params.timezone})` : ""}.`,
+    refused && me
+      ? `AdaptlyPost will refuse to ${refused}: this key has the ${me.role.name} role. Approve to save the post below as a draft for a workspace member to ${refused}; deny to do nothing.`
+      : timing,
     `Accounts: ${targets.join(", ")}`,
     ...settingLines(params),
     ...(media.length ? [`Media: ${media.join(", ")}`] : []),
@@ -263,12 +289,13 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
       lines,
       "Save it with mode DRAFT and let the user review and publish it in the AdaptlyPost app, or post to fewer accounts per call.",
     ),
-    severity: publishNow ? "critical" : "warning",
+    severity: refused ? "warning" : publishNow ? "critical" : "warning",
     scope: {
       kind: "external-post",
       target: platforms.map((platform) => PLATFORM_LABELS[platform] ?? platform).join(", "),
-      visibility: "public",
+      visibility: refused ? "restricted" : "public",
     },
+    ...(refused && { fallback: "draft" as const }),
   };
 }
 
@@ -327,6 +354,12 @@ async function describeRetry(cfg: PluginConfig, params: Record<string, unknown>)
   const platformIds = stringArray(params.platform_ids);
   const path = `/social-posts/${encodeURIComponent(postId)}`;
   const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const me = await keyCapabilities(cfg, signal);
+  if (me && !me.can.publish) {
+    throw new Error(
+      `This key has the ${me.role.name} role, which cannot publish, so AdaptlyPost would refuse the retry with 403 permission_denied. Nothing was retried. Tell the user a workspace member with an Editor or Admin role has to retry it in the AdaptlyPost app, or give the agent a key with that role.`,
+    );
+  }
   const [post, results] = await Promise.all([
     callApi(cfg, "GET", path, { signal }) as Promise<PostRecord>,
     callApi(cfg, "GET", `${path}/results`, { signal }) as Promise<{ results?: ResultRow[] }>,

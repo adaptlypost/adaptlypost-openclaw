@@ -192,7 +192,7 @@ export default definePluginEntry({
             allowedDecisions: ["allow-once", "deny"],
             timeoutMs: APPROVAL_TIMEOUT_MS,
             onResolution(decision) {
-              if (decision === "allow-once") approvals.grant(toolCallId, params);
+              if (decision === "allow-once") approvals.grant(toolCallId, params, approval.fallback);
             },
           },
         };
@@ -277,7 +277,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -326,9 +326,24 @@ export default definePluginEntry({
         ...PlatformConfigFields,
       }),
       async execute(toolCallId, params, signal) {
-        const body = buildPostBody(params as Record<string, unknown>);
-        if ((params as { mode: string }).mode !== "DRAFT") approvals.consume(toolCallId, CREATE_POST_TOOL, params);
-        return jsonResult(await callApi(cfg(), "POST", "/social-posts", { body, signal }));
+        const post = params as Record<string, unknown> & { mode: string };
+        let body = buildPostBody(post);
+        let savedAsDraft = false;
+        if (post.mode !== "DRAFT") {
+          const { fallback } = approvals.consume(toolCallId, CREATE_POST_TOOL, params);
+          if (fallback === "draft") {
+            const { scheduledAt: _scheduledAt, ...rest } = post;
+            body = buildPostBody({ ...rest, mode: "DRAFT" });
+            savedAsDraft = true;
+          }
+        }
+        const result = await callApi(cfg(), "POST", "/social-posts", { body, signal });
+        if (!savedAsDraft) return jsonResult(result);
+        return jsonResult({
+          ...(result as Record<string, unknown>),
+          savedAsDraft: true,
+          note: `Saved as a draft instead of ${post.mode === "PUBLISH_NOW" ? "publishing" : "scheduling"}: this key's role cannot do that, and the user approved the draft. A workspace member can publish it in the AdaptlyPost app.`,
+        });
       },
     });
 

@@ -5,7 +5,64 @@ Auth: `Authorization: Bearer <api-token>` header. Tokens start with the `adaptly
 
 The same header also accepts a WorkOS OAuth access token, which is how the hosted MCP server authenticates. For a skill, use an `adaptly_` token.
 
+## Roles and permissions
+
+Every key carries the workspace role chosen when it was created. Its permissions are that role's set intersected with the current permissions of the member who created it, so a key never does more than its creator: demoting the creator shrinks the key on the next request, and removing the creator from the workspace revokes it. An OAuth token acts with the member's own role in their default workspace.
+
+| Role | Permissions |
+| --- | --- |
+| `admin` | every permission below |
+| `editor` | `workspace.read`, `posts.read`, `posts.draft`, `posts.others`, `posts.schedule`, `posts.publish`, `posts.delete`, `media.upload`, `accounts.read`, `analytics.read`, `analytics.sync`, `ai.generate`, `members.read`, `tokens.own`, `webhooks.read`, `webhooks.manage`, `signature.manage` |
+| `contributor` | `workspace.read`, `posts.read`, `posts.draft`, `media.upload`, `accounts.read`, `analytics.read`, `ai.generate`, `members.read`, `tokens.own` |
+| `viewer` | `workspace.read`, `posts.read`, `accounts.read`, `analytics.read`, `members.read`, `webhooks.read` |
+
+Which permission each endpoint needs:
+
+| Endpoint | Permission | Roles |
+| --- | --- | --- |
+| `GET /me` | none | every valid key |
+| `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results` | `posts.read` | all |
+| `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` | `posts.draft` | admin, editor, contributor |
+| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt`; `PATCH /social-posts/:id` on a post that is not a `DRAFT`; `POST /social-posts/bulk` | `posts.schedule` | admin, editor |
+| `POST /social-posts` and `POST /social-posts/:id/publish` without `scheduledAt` or with a past one; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
+| `DELETE /social-posts/:id` on a post that is not a `DRAFT` | `posts.delete` | admin, editor |
+| Any write on a post another member created | the row above, plus `posts.others` | admin, editor |
+| `POST /upload-urls` | `media.upload` | admin, editor, contributor |
+| `GET /social-accounts` | `accounts.read` | all |
+| `POST /social-accounts/:id/check`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
+| `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
+| `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
+| `GET /analytics/*` | `analytics.read` | all |
+| `POST /analytics/sync` | `analytics.sync` | admin, editor |
+| `POST /ai/*`, `GET /ai/images/:jobId` | `ai.generate` | admin, editor, contributor |
+
+The permission is also written into each operation's description in `GET /openapi.json`.
+
 ## Endpoints
+
+### GET /me
+
+Describes the calling key. Open to every valid key, so an agent can find out what it may do before it tries.
+
+**Response:**
+
+```json
+{
+  "tokenType": "api_token",
+  "tokenId": "cmtok0000000000000000001",
+  "tokenName": "openclaw agent",
+  "workspace": { "id": "ag_01j9x", "name": "Marketing" },
+  "organizationId": "org_01j9x",
+  "role": { "key": "contributor", "name": "Contributor" },
+  "issuerRole": "editor",
+  "permissions": ["workspace.read", "posts.read", "posts.draft", "media.upload", "accounts.read", "analytics.read", "ai.generate", "members.read", "tokens.own"],
+  "can": { "draft": true, "schedule": false, "publish": false },
+  "summary": "Contributor: creates and edits its own drafts and cannot schedule or publish.",
+  "expiresAt": null
+}
+```
+
+`tokenType` is `api_token` or `oauth`; `tokenId`, `tokenName`, `issuerRole` and `workspace.name` are `null` when there is none. `issuerRole` is the current role of the member who created the key; the key's permissions never exceed it. `can` answers the three questions a posting agent has; `permissions` is the full list. `expiresAt` is `null` for a key that never expires.
 
 ### GET /social-accounts
 
@@ -734,7 +791,8 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 ## Error Responses
 
 - `400` — Bad request (missing fields, invalid data, validation errors)
-- `401` — Invalid, expired, or missing API token
+- `401` — Invalid, expired, revoked or missing API token. `code: token_issuer_lost_access` means the member who created the key lost access to the workspace, so the key was revoked; a new key from a current member is the only fix
+- `403` — The key's role lacks the permission (`code: permission_denied`), or the workspace plan is not active (`code: subscription_required`)
 - `404` — Resource not found or access denied
 - `429` — Rate limit exceeded; see `Retry-After`
 
@@ -745,5 +803,32 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
   "message": ["timezone must be a string", "timezone should not be empty"],
   "error": "Bad Request",
   "statusCode": 400
+}
+```
+
+**Permission denied (403):**
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "code": "permission_denied",
+  "requiredPermission": "posts.publish",
+  "role": "contributor",
+  "tokenType": "api_token",
+  "message": "The Contributor role cannot publish posts. Send the post with saveAsDraft: true and ask a workspace member to publish it."
+}
+```
+
+`requiredPermission` is the permission the operation needs (see [Roles and permissions](#roles-and-permissions)), `role` is the calling key's role key and `tokenType` is `api_token` or `oauth`. `message` says what the role cannot do and what to do instead, in the request's language. Stop on this error: a retry or another key of the same role gets the same answer.
+
+**Key revoked because its creator left (401):**
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "code": "token_issuer_lost_access",
+  "message": "This API key no longer works: the member who created it lost access to the workspace. Ask a workspace admin for a new key."
 }
 ```
