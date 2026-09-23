@@ -9,7 +9,7 @@ For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typ
 ## Prerequisites
 
 1. Sign up at [adaptlypost.com](https://adaptlypost.com/signup)
-2. Go to **Settings → API Tokens** and generate a **dedicated, revocable** token for your agent. Pick its role there: Contributor if a human publishes what the agent drafts, Editor if the agent itself must schedule or publish. The token never does more than you can, and `GET /me` tells the agent what it may do
+2. Go to **Settings → API Tokens** and generate a **dedicated, revocable** token for your agent. Pick its role there: Contributor if a human publishes what the agent drafts, Editor if the agent itself must schedule or publish. The token never does more than you can
 3. Connect only the social accounts the agent actually needs
 
 ## Install — OpenClaw

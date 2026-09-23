@@ -48,14 +48,7 @@ Rate limit: 600 requests per minute per token. Every response carries `RateLimit
 
 ## Roles and what the key may do
 
-A key carries the workspace role chosen when it was created, and never does more than the member who created it: if that member is demoted the key shrinks, if they leave the workspace the key stops working. Read the key in hand before the first write call, once per session:
-
-```bash
-curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
-  https://post.adaptlypost.com/post/api/v1/me
-```
-
-Returns `{ "tokenType", "tokenId", "tokenName", "workspace": { "id", "name" }, "organizationId", "role": { "key", "name" }, "issuerRole", "permissions": [...], "can": { "draft", "schedule", "publish" }, "summary", "expiresAt" }`. It works for every valid key. `can` is the short answer; `permissions` is the full list.
+A key carries the workspace role chosen when it was created, and never does more than the member who created it: if that member is demoted the key shrinks, if they leave the workspace the key stops working.
 
 | Role | Can | Cannot |
 | --- | --- | --- |
@@ -64,7 +57,7 @@ Returns `{ "tokenType", "tokenId", "tokenName", "workspace": { "id", "name" }, "
 | `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, delete anything but its own drafts, touch other members' posts, manage webhooks |
 | `viewer` | Read posts, accounts, analytics, webhooks | Any write |
 
-With `can.schedule` or `can.publish` false, every post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
+Once a write answers `403` with `requiredPermission` `posts.schedule` or `posts.publish`, every later post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
 
 A call the role does not cover answers `403` with this body:
 
@@ -484,7 +477,6 @@ Upload 1-20 files per request.
 
 ### API workflow
 
-- Call `/me` once per session. If `can.schedule` or `can.publish` is false, do not offer to schedule or publish: save drafts and say who has to publish them.
 - Always call `/social-accounts` first to get valid connection IDs for each platform.
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.

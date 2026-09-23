@@ -20,7 +20,6 @@ Which permission each endpoint needs:
 
 | Endpoint | Permission | Roles |
 | --- | --- | --- |
-| `GET /me` | none | every valid key |
 | `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results` | `posts.read` | all |
 | `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` | `posts.draft` | admin, editor, contributor |
 | `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt`; `PATCH /social-posts/:id` on a post that is not a `DRAFT`; `POST /social-posts/bulk` | `posts.schedule` | admin, editor |
@@ -39,30 +38,6 @@ Which permission each endpoint needs:
 The permission is also written into each operation's description in `GET /openapi.json`.
 
 ## Endpoints
-
-### GET /me
-
-Describes the calling key. Open to every valid key, so an agent can find out what it may do before it tries.
-
-**Response:**
-
-```json
-{
-  "tokenType": "api_token",
-  "tokenId": "cmtok0000000000000000001",
-  "tokenName": "openclaw agent",
-  "workspace": { "id": "ag_01j9x", "name": "Marketing" },
-  "organizationId": "org_01j9x",
-  "role": { "key": "contributor", "name": "Contributor" },
-  "issuerRole": "editor",
-  "permissions": ["workspace.read", "posts.read", "posts.draft", "media.upload", "accounts.read", "analytics.read", "ai.generate", "members.read", "tokens.own"],
-  "can": { "draft": true, "schedule": false, "publish": false },
-  "summary": "Contributor: creates and edits its own drafts and cannot schedule or publish.",
-  "expiresAt": null
-}
-```
-
-`tokenType` is `api_token` or `oauth`; `tokenId`, `tokenName`, `issuerRole` and `workspace.name` are `null` when there is none. `issuerRole` is the current role of the member who created the key; the key's permissions never exceed it. `can` answers the three questions a posting agent has; `permissions` is the full list. `expiresAt` is `null` for a key that never expires.
 
 ### GET /social-accounts
 
