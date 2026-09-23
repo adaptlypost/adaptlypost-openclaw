@@ -2,7 +2,7 @@
   "id": "adaptlypost",
   "name": "AdaptlyPost",
   "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky from OpenClaw, and read how they performed.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
