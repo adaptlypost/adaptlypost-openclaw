@@ -235,7 +235,7 @@ export default definePluginEntry({
       name: UPLOAD_TOOL,
       label: "AdaptlyPost: upload media",
       description:
-        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content. Limits: 50 MB per image, 1 GB per local video, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post.",
+        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content. Limits: 50 MB per image, 1 GB per local video, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse.",
       parameters: Type.Object({
         file_paths: Type.Optional(
           Type.Array(Type.String(), {
@@ -296,7 +296,7 @@ export default definePluginEntry({
         ),
         mediaUrls: Type.Optional(
           Type.Array(Type.String(), {
-            description: "publicUrl values returned by adaptlypost_upload_media.",
+            description: "publicUrl values returned by adaptlypost_upload_media. The same publicUrl may be reused across posts; do not reuse mediaUrls read back from a published post.",
           }),
         ),
         mediaAltTexts: Type.Optional(

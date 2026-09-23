@@ -385,6 +385,8 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 
 > **The file must be uploaded (step 2) before you reference its `publicUrl`.** `POST /social-posts` and `POST /social-posts/bulk` verify every `publicUrl` exists in storage. A URL whose PUT never completed (or whose upload URL expired after 1 hour) is rejected with `400 Bad Request` and `Media file(s) not found in storage: <url>`. In bulk requests this is reported per-post; the remaining posts are still scheduled.
 
+One `publicUrl` may be reused across any number of posts, bulk items included; the file is kept until the last post referencing it has published. Reuse the `publicUrl` you uploaded, not a `mediaUrls` value read back from a published post, since those may be the platform's own expiring links.
+
 ### GET /social-posts/:id/results
 
 Per-platform publishing outcome for one post. Each platform reports on its own, so read this per row rather than treating the post as one pass or fail. Publishing is asynchronous, so poll until no row is `PENDING` or `PUBLISHING`.
