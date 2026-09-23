@@ -367,14 +367,16 @@ async function describeRetry(cfg: PluginConfig, params: Record<string, unknown>)
     throw lookupFailed(`post ${postId}`, error);
   });
 
+  const targeted = (row: ResultRow) =>
+    platformIds.length === 0 || platformIds.includes(row.platformId) || platformIds.includes(row.platform);
   const failedIds = new Set(
     (results.results ?? [])
-      .filter((row) => platformIds.includes(row.platformId) && row.status === "FAILED")
+      .filter((row) => targeted(row) && row.status === "FAILED")
       .map((row) => row.platformId),
   );
   const entries = (post.platforms ?? []).filter((entry) => failedIds.has(entry.id));
   if (!entries.length || entries.length !== failedIds.size) {
-    throw new Error("None of platform_ids is a FAILED platform of this post that can be shown for approval. Nothing was retried.");
+    throw new Error("No FAILED platform of this post matches platform_ids, so nothing can be shown for approval. Nothing was retried.");
   }
 
   const title = `Retry publishing on ${entries.length} platform${entries.length === 1 ? "" : "s"}`;

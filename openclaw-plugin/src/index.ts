@@ -416,23 +416,25 @@ export default definePluginEntry({
       name: RETRY_TOOL,
       label: "AdaptlyPost: retry failed platforms",
       description:
-        "Re-queue publishing for a post's FAILED platforms. It republishes immediately, so every call pauses for the user's approval. Only rows with status FAILED whose id is in platform_ids are reset to PENDING and retried with the same content; other ids are ignored, and with none matching the call fails with 'No failed platforms to retry'. The post moves to PUBLISHING and the retry is asynchronous, so check adaptlypost_post_results for the outcome. Get platform_ids (not platform names) and each errorMessage from adaptlypost_post_results first; retry once the cause is fixed (reconnected account, replaced media), not for a platform restriction, which repeated retries make worse. Content cannot change on retry.",
+        "Re-queue publishing for a post's FAILED platforms. It republishes immediately, so every call pauses for the user's approval. platform_ids takes platformId values from adaptlypost_post_results, platform names such as 'BLUESKY' (every failed row of that platform), or can be left empty to retry every failed row. Only rows with status FAILED are reset to PENDING and retried with the same content. A value matching neither a row id nor a platform of the post fails with 'Unknown retry target'; with nothing failed among the matches the call fails with 'No failed platforms to retry'. The post moves to PUBLISHING and the retry is asynchronous, so check adaptlypost_post_results for the outcome. Read each errorMessage first and retry once the cause is fixed (reconnected account, replaced media), not for a platform restriction, which repeated retries make worse. Content cannot change on retry.",
       parameters: Type.Object({
         post_id: Type.String({ description: "Post id whose platforms failed." }),
-        platform_ids: Type.Array(Type.String(), {
-          minItems: 1,
-          description: "platformId values of FAILED rows from adaptlypost_post_results, not platform names.",
-        }),
+        platform_ids: Type.Optional(
+          Type.Array(Type.String(), {
+            description:
+              "platformId values from adaptlypost_post_results or platform names such as BLUESKY. Omit to retry every FAILED row.",
+          }),
+        ),
       }),
       async execute(toolCallId, params, signal) {
         approvals.consume(toolCallId, RETRY_TOOL, params);
         const { post_id: postId, platform_ids: platformIds } = params as {
           post_id: string;
-          platform_ids: string[];
+          platform_ids?: string[];
         };
         return jsonResult(
           await callApi(cfg(), "POST", `/social-posts/${encodeURIComponent(postId)}/retry`, {
-            body: { platformIds },
+            body: platformIds?.length ? { platformIds } : {},
             signal,
           }),
         );

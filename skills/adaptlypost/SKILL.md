@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.8.0
+version: 1.8.1
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -239,7 +239,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0&platforms=FACEBOOK&platforms=TIKTOK"
 ```
 
-Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
+Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`; `status` and `platform` are accepted aliases, and any other query parameter returns `400`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
 
 ### 7. Get post details
 
@@ -314,7 +314,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID/retry
   -d '{"platformIds": ["pp_abc002"]}'
 ```
 
-Only rows whose status is `FAILED` and whose id you pass are reset and re-queued with the same content; other ids are ignored, and if none qualify the API returns `400` `No failed platforms to retry`. The post moves back to `PUBLISHING` and the retry is asynchronous, so read the results again afterwards.
+`platformIds` takes `platformId` values from the results, platform names such as `BLUESKY` (every failed entry of that platform), or can be omitted to retry every failed entry. Only rows whose status is `FAILED` are reset and re-queued with the same content. A value that matches neither an entry id nor a platform of the post returns `400` `Unknown retry target: ...`; if nothing matched has failed the API returns `400` `No failed platforms to retry`. The post moves back to `PUBLISHING` and the retry is asynchronous, so read the results again afterwards.
 
 Read the error before retrying. A rejected token or bad media is worth another attempt. A platform restriction ("too many posts in a short window") is that network's decision about the account, and retrying makes it worse rather than better. Tell the user and stop.
 

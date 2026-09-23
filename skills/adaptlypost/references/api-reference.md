@@ -191,7 +191,7 @@ List every post in the authenticated account group, any status, with pagination.
 - `limit` (integer, optional): Number of posts to return. Range: 1-100. Default: 20
 - `offset` (integer, optional): Number of posts to skip. Min: 0. Default: 0
 - `sortOrder` (string, optional): `NEWEST` or `OLDEST`. Default: `NEWEST`
-- `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value.
+- `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value. `status` is accepted as an alias; any query parameter outside this list returns `400`.
 - `platforms` (PlatformType[], optional): Filter by one or more platforms. Repeat the key per value.
 - `startDate` (string, optional): Lower bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-20`).
 - `endDate` (string, optional): Upper bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-22`).
@@ -242,7 +242,7 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
 **Post status values:** `DRAFT`, `SCHEDULED`, `PENDING`, `PUBLISHING`, `COMPLETED`, `PARTIAL_FAILURE`, `FAILED`
 **Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
-`previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
+The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
 
 ### GET /social-posts/:id
 
@@ -444,17 +444,17 @@ Omit `scheduledAt` (or pass a past time) to publish now: the post moves to `PEND
 
 ### POST /social-posts/:id/retry
 
-Retry the platforms that failed on a post. Only rows whose status is `FAILED` and whose id is in `platformIds` are reset to `PENDING` and re-queued with the same content; other ids are ignored, and if none qualify the API returns `400` `No failed platforms to retry`. The post moves to `PUBLISHING` and the retry is asynchronous, so read the results endpoint again afterwards.
+Retry the platforms that failed on a post. `platformIds` takes PostPlatform ids from the results endpoint, platform names such as `BLUESKY` (every failed entry of that platform), or can be omitted to retry every failed entry. Only rows whose status is `FAILED` are reset to `PENDING` and re-queued with the same content. A value that matches neither an entry id nor a platform of the post returns `400` `Unknown retry target: ...`; if nothing matched has failed the API returns `400` `No failed platforms to retry`. The post moves to `PUBLISHING` and the retry is asynchronous, so read the results endpoint again afterwards.
 
 **Request:**
 
 ```json
-{ "platformIds": ["pp_abc002"] }
+{ "platformIds": ["pp_abc002", "BLUESKY"] }
 ```
 
 **Response:** `{ "postId", "queuedPlatforms", "isScheduled": false }`
 
-Get `platformIds` (not platform names) from `GET /social-posts/:id/results`. Retry only after the cause is fixed. A platform restriction is that network's decision about the account and a retry will not clear it, while a refreshed token or replaced media will.
+Get `platformIds` from `GET /social-posts/:id/results`, or name the platform. Retry only after the cause is fixed. A platform restriction is that network's decision about the account and a retry will not clear it, while a refreshed token or replaced media will.
 
 ### POST /connect-links
 
