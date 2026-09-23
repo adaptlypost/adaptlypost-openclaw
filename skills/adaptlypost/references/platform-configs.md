@@ -199,6 +199,15 @@ These platforms use only connection ID arrays — no additional config:
 - URLs auto-generate link cards
 - No editing after publishing
 
+### Mastodon
+
+- Uses `mastodonConnectionIds` array
+- Character limit: 500 by default, some servers allow more
+- Up to 4 images, some servers allow more
+- 1 video per post
+- Alt text supported
+- No analytics
+
 ### Threads
 
 - Uses `threadsConnectionIds` array

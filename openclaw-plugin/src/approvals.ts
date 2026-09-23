@@ -78,6 +78,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   THREADS: "Threads",
   BLUESKY: "Bluesky",
   TWITTER: "X",
+  MASTODON: "Mastodon",
 };
 
 const CONNECTION_FIELDS: Record<string, string> = {
@@ -90,6 +91,7 @@ const CONNECTION_FIELDS: Record<string, string> = {
   THREADS: "threadsConnectionIds",
   BLUESKY: "blueskyConnectionIds",
   TWITTER: "twitterConnectionIds",
+  MASTODON: "mastodonConnectionIds",
 };
 
 type Account = { id: string; platform: string; displayName?: string; username?: string; pageId?: string };

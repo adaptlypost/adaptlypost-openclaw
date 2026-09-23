@@ -30,6 +30,7 @@ const Platform = Type.Union(
     Type.Literal("THREADS"),
     Type.Literal("BLUESKY"),
     Type.Literal("TWITTER"),
+    Type.Literal("MASTODON"),
   ],
   { description: "AdaptlyPost platform identifier." },
 );
@@ -65,7 +66,7 @@ const AnalyticsRangeFields = {
   platforms: Type.Optional(
     Type.Array(Platform, {
       description:
-        "Restrict to these platforms; omit for every platform with analytics. TWITTER has none and is ignored; LINKEDIN returns no data until LinkedIn approves analytics access.",
+        "Restrict to these platforms; omit for every platform with analytics. TWITTER and MASTODON have none and are ignored; LINKEDIN returns no data until LinkedIn approves analytics access.",
     }),
   ),
 };
@@ -78,6 +79,7 @@ const ConnectionIdFields = {
   tiktokConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "TikTok connection ids." })),
   threadsConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Threads connection ids." })),
   blueskyConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Bluesky connection ids." })),
+  mastodonConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Mastodon connection ids." })),
   pinterestConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Pinterest connection ids." })),
   pageIds: Type.Optional(
     Type.Array(Type.String(), {
@@ -160,7 +162,7 @@ export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky and Mastodon, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -201,7 +203,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all nine platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -299,7 +301,7 @@ export default definePluginEntry({
         mediaAltTexts: Type.Optional(
           Type.Array(Type.String({ maxLength: 1000 }), {
             description:
-              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
+              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
           }),
         ),
         mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
