@@ -32,6 +32,7 @@
       "adaptlypost_list_posts",
       "adaptlypost_post_results",
       "adaptlypost_retry_failed",
+      "adaptlypost_unschedule_post",
       "adaptlypost_analytics_overview",
       "adaptlypost_post_analytics"
     ]
@@ -98,6 +99,16 @@
       ]
     },
     "adaptlypost_retry_failed": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_unschedule_post": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",

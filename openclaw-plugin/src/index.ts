@@ -16,6 +16,7 @@ import {
   describeApproval,
   GATED_TOOLS,
   RETRY_TOOL,
+  UNSCHEDULE_TOOL,
   UPLOAD_TOOL,
 } from "./approvals.js";
 
@@ -419,6 +420,25 @@ export default definePluginEntry({
             body: { platformIds },
             signal,
           }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: UNSCHEDULE_TOOL,
+      label: "AdaptlyPost: unschedule a post",
+      description:
+        "Take a SCHEDULED post, or a DRAFT that still has a date, off the calendar. It becomes an undated DRAFT with scheduledAt null, keeps its content, media and accounts, and nothing publishes until someone schedules it again in the AdaptlyPost app. Every call pauses for the user's approval. Use it when the user wants a post pulled without deleting it; this plugin cannot reschedule, so tell the user to pick the new time in the app. Fails with 400 'Cannot edit post in current state' for any other status, and 404 for an id outside the token's workspace. Returns the post as an undated draft in the shape of adaptlypost_list_posts entries.",
+      parameters: Type.Object({
+        post_id: Type.String({
+          description: "Id of the scheduled post, from adaptlypost_list_posts or adaptlypost_create_post.",
+        }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, UNSCHEDULE_TOOL, params);
+        const { post_id: postId } = params as { post_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/social-posts/${encodeURIComponent(postId)}/unschedule`, { signal }),
         );
       },
     });

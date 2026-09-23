@@ -288,15 +288,20 @@ Only rows whose status is `FAILED` and whose id you pass are reset and re-queued
 
 Read the error before retrying. A rejected token or bad media is worth another attempt. A platform restriction ("too many posts in a short window") is that network's decision about the account, and retrying makes it worse rather than better. Tell the user and stop.
 
-### 11. Edit, delete, or publish a draft
+### 11. Edit, unschedule, delete, or publish a draft
 
 ```bash
 curl -X PATCH  .../social-posts/POST_ID   -d '{"text": "Revised copy"}'
 curl -X DELETE .../social-posts/POST_ID
+curl -X POST   .../social-posts/POST_ID/unschedule
 curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
 ```
 
 `PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
+
+Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time it already has is fine, even once that time has passed. To publish it now, call `/publish` without `scheduledAt`.
+
+`POST /social-posts/:id/unschedule` takes no body and turns a `SCHEDULED` post, or a `DRAFT` that still has a date, back into an undated `DRAFT` with `scheduledAt: null`. Content, media and accounts stay as they are, and nothing publishes until the post is scheduled again. Use it when the user wants a post off the calendar without deleting it. Any other status returns `400` `Cannot edit post in current state`, and an id outside the workspace returns `404`.
 
 `DELETE` removes the record from AdaptlyPost, and a deleted scheduled post will not publish. It never removes content already on a network: deleting a `COMPLETED` post only drops AdaptlyPost's record, and removing the live post is a manual step per platform. Prefer `PATCH` over delete-and-recreate.
 

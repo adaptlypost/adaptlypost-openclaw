@@ -11,7 +11,8 @@ import {
 export const UPLOAD_TOOL = "adaptlypost_upload_media";
 export const CREATE_POST_TOOL = "adaptlypost_create_post";
 export const RETRY_TOOL = "adaptlypost_retry_failed";
-export const GATED_TOOLS = [UPLOAD_TOOL, CREATE_POST_TOOL, RETRY_TOOL] as const;
+export const UNSCHEDULE_TOOL = "adaptlypost_unschedule_post";
+export const GATED_TOOLS = [UPLOAD_TOOL, CREATE_POST_TOOL, RETRY_TOOL, UNSCHEDULE_TOOL] as const;
 
 export const APPROVAL_TIMEOUT_MS = 300_000;
 const GRANT_TTL_MS = 60_000;
@@ -365,6 +366,42 @@ async function describeRetry(cfg: PluginConfig, params: Record<string, unknown>)
   };
 }
 
+const UNSCHEDULE_TEXT_PREVIEW = 120;
+
+async function describeUnschedule(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const postId = String(params.post_id ?? "");
+  const post = (await callApi(cfg, "GET", `/social-posts/${encodeURIComponent(postId)}`, {
+    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    throw lookupFailed(`post ${postId}`, error);
+  })) as PostRecord & { scheduledAt?: string | null };
+
+  const platforms = post.platforms ?? [];
+  const accounts = platforms.map(
+    (entry) => `${PLATFORM_LABELS[entry.platform] ?? entry.platform} ${String(entry.accountName ?? entry.id)}`,
+  );
+  const text = nonEmpty(post.text) ? post.text : undefined;
+  const preview = text && text.length > UNSCHEDULE_TEXT_PREVIEW ? `${text.slice(0, UNSCHEDULE_TEXT_PREVIEW)}…` : text;
+  const lines = [
+    post.scheduledAt
+      ? `Cancels the publication planned for ${post.scheduledAt}. The post stays as an undated draft with its content and accounts.`
+      : "The post stays as an undated draft with its content and accounts.",
+    ...(accounts.length ? [`Accounts: ${accounts.join(", ")}`] : []),
+    `Text: ${preview ? `"${preview}"` : "(none)"}`,
+  ];
+
+  return {
+    title: "Unschedule a post",
+    description: lines.join("\n").slice(0, DESCRIPTION_LIMIT),
+    severity: "warning",
+    scope: {
+      kind: "external-post",
+      target: platforms.map((entry) => PLATFORM_LABELS[entry.platform] ?? entry.platform).join(", ") || postId,
+      visibility: "restricted",
+    },
+  };
+}
+
 export async function describeApproval(
   cfg: PluginConfig,
   toolName: string,
@@ -377,6 +414,8 @@ export async function describeApproval(
       return describePost(cfg, params);
     case RETRY_TOOL:
       return describeRetry(cfg, params);
+    case UNSCHEDULE_TOOL:
+      return describeUnschedule(cfg, params);
     default:
       return undefined;
   }

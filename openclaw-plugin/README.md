@@ -89,10 +89,11 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
+| `adaptlypost_unschedule_post` | Take a scheduled post off the calendar and keep it as an undated draft. Needs approval. |
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Nine tools, not the nineteen the MCP server exposes. Post editing, deletion,
+Ten tools, not the nineteen the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the

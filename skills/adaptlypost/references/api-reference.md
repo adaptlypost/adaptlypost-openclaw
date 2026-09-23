@@ -373,9 +373,19 @@ Take `platformId` from `FAILED` rows when calling `POST /social-posts/:id/retry`
 
 Update a `DRAFT` or `SCHEDULED` post. Any other status is rejected with `400` `Cannot edit post in current state` rather than partially applied.
 
+Moving a `SCHEDULED` post's `scheduledAt` more than a minute into the past returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time the post already has is accepted even after it passed. To publish now, use `POST /social-posts/:id/publish` without `scheduledAt`.
+
 Accepts the same body as `POST /social-posts`, minus `saveAsDraft`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, and `thumbnailTimestampMs` you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
+
+### POST /social-posts/:id/unschedule
+
+Take a post off the calendar without deleting it. Accepts a `SCHEDULED` post, or a `DRAFT` that still has a date, and turns it into an undated `DRAFT` with `scheduledAt: null`. Content, media and accounts are kept, and nothing publishes until the post is scheduled again with `POST /social-posts/:id/publish`. No request body.
+
+Any other status returns `400` `Cannot edit post in current state`. An id outside the workspace returns `404` `Post not found or access denied`.
+
+**Response:** the post as an undated draft, in the same shape as `GET /social-posts/:id`.
 
 ### DELETE /social-posts/:id
 
