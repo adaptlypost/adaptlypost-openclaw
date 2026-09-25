@@ -144,6 +144,20 @@ const PlatformConfigFields = {
       { description: "Facebook per-page config. pageId must match an entry in pageIds." },
     ),
   ),
+  linkedinConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String(),
+        documentTitle: Type.Optional(
+          Type.String({
+            maxLength: 100,
+            description: "Title LinkedIn shows on a DOCUMENT post. Defaults to the file name.",
+          }),
+        ),
+      }),
+      { description: "LinkedIn per-connection config, only used by DOCUMENT posts. connectionId must match linkedinConnectionIds." },
+    ),
+  ),
   pinterestConfigs: Type.Optional(
     Type.Array(
       Type.Object({
@@ -235,7 +249,7 @@ export default definePluginEntry({
       name: UPLOAD_TOOL,
       label: "AdaptlyPost: upload media",
       description:
-        "Upload images or videos to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, checked by file content. Limits: 50 MB per image, 1 GB per local video, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse.",
+        "Upload images, videos or documents to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension). Limits: 50 MB per image, 1 GB per local video, 100 MB per document, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse.",
       parameters: Type.Object({
         file_paths: Type.Optional(
           Type.Array(Type.String(), {
@@ -277,7 +291,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -285,8 +299,17 @@ export default definePluginEntry({
             "Target platforms. Each needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from adaptlypost_accounts.",
         }),
         contentType: Type.Union(
-          [Type.Literal("TEXT"), Type.Literal("IMAGE"), Type.Literal("VIDEO"), Type.Literal("CAROUSEL")],
-          { description: "Must match the media supplied. CAROUSEL needs more than one mediaUrl." },
+          [
+            Type.Literal("TEXT"),
+            Type.Literal("IMAGE"),
+            Type.Literal("VIDEO"),
+            Type.Literal("CAROUSEL"),
+            Type.Literal("DOCUMENT"),
+          ],
+          {
+            description:
+              "Must match the media supplied. CAROUSEL needs more than one mediaUrl. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
+          },
         ),
         text: Type.Optional(Type.String({ description: "Default caption shared across platforms." })),
         platformTexts: Type.Optional(

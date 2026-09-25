@@ -194,6 +194,9 @@ function settingLines(params: Record<string, unknown>): string[] {
       `Facebook: ${String(entry.postType ?? "FEED")}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
     );
   }
+  for (const entry of configEntries(params, "linkedinConfigs")) {
+    if (nonEmpty(entry.documentTitle)) lines.push(`LinkedIn: document title "${entry.documentTitle}"`);
+  }
   for (const entry of configEntries(params, "pinterestConfigs")) {
     lines.push(
       `Pinterest: board ${String(entry.boardId)}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`,

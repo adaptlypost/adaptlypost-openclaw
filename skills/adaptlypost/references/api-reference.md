@@ -133,7 +133,7 @@ Create or schedule a post to one or more social media platforms.
 **Required fields:**
 
 - `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
-- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, or `CAROUSEL`
+- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages)
 - `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
 **Optional fields:**
@@ -160,6 +160,7 @@ Create or schedule a post to one or more social media platforms.
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
 - `youtubeConfigs` (array): YouTube-specific settings per connection
+- `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts)
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
@@ -308,7 +309,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 
 **Post item fields:**
 
-- `contentType` (string, required): `TEXT`, `IMAGE`, `VIDEO`, or `CAROUSEL`
+- `contentType` (string, required): `TEXT`, `IMAGE`, `VIDEO`, or `CAROUSEL`. `DOCUMENT` posts cannot be bulk scheduled; create them one at a time
 - `scheduledAt` (string, required): ISO 8601 UTC datetime
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
@@ -360,6 +361,13 @@ Get presigned upload URLs for media files. Upload 1-20 files per request.
 - `image/webp` — WebP images
 - `video/mp4` — MP4 video
 - `video/quicktime` — MOV video
+- `application/pdf` — PDF document (LinkedIn `DOCUMENT` posts)
+- `application/vnd.ms-powerpoint` — PowerPoint 97-2003 document (LinkedIn `DOCUMENT` posts)
+- `application/vnd.openxmlformats-officedocument.presentationml.presentation` — PowerPoint document (LinkedIn `DOCUMENT` posts)
+- `application/msword` — Word 97-2003 document (LinkedIn `DOCUMENT` posts)
+- `application/vnd.openxmlformats-officedocument.wordprocessingml.document` — Word document (LinkedIn `DOCUMENT` posts)
+
+Keep the file extension in `fileName`: a post reads the document type from it.
 
 **Response:**
 
@@ -739,7 +747,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
 
 **ContentType:**
-`TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`
+`TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, `DOCUMENT`
 
 **TikTokPrivacyLevel:**
 `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY`

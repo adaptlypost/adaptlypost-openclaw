@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.8.1
+version: 1.9.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -230,6 +230,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
 For carousel: upload multiple files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`.
+For a LinkedIn document (PDF, slide deck or Word file shown as a swipeable document): upload the one file (keep its extension in `fileName`), use `contentType: "DOCUMENT"`, put that single URL in `mediaUrls`, target only `LINKEDIN`, and optionally name it with `"linkedinConfigs": [{ "connectionId": "LINKEDIN_ID", "documentTitle": "Q3 results" }]` (max 100 chars, defaults to the file name). DOCUMENT on another platform, a second file, or a document on a non-DOCUMENT post returns 400.
 For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube and videos ignore it.
 
 ### 6. List posts
@@ -398,11 +399,11 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle` |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (required), `title`, `link` |
+| **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
 | **X (Twitter)** | — | No config object, uses `twitterConnectionIds` only |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds` only |
 | **Mastodon** | — | No config object, uses `mastodonConnectionIds` only |
 | **Threads** | — | No config object, uses `threadsConnectionIds` only |
-| **LinkedIn** | — | No config object, uses `linkedinConnectionIds` only |
 
 **Example with TikTok config:**
 
@@ -437,8 +438,13 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 | `image/webp` | .webp | Images |
 | `video/mp4` | .mp4 | Videos |
 | `video/quicktime` | .mov | Videos |
+| `application/pdf` | .pdf | LinkedIn documents |
+| `application/vnd.ms-powerpoint` | .ppt | LinkedIn documents |
+| `application/vnd.openxmlformats-officedocument.presentationml.presentation` | .pptx | LinkedIn documents |
+| `application/msword` | .doc | LinkedIn documents |
+| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | .docx | LinkedIn documents |
 
-Upload 1-20 files per request.
+Upload 1-20 files per request. Keep the file extension in `fileName`: a post reads the document type from it.
 
 ## Media Specs Quick Reference
 
@@ -448,7 +454,7 @@ Upload 1-20 files per request.
 | Instagram | JPEG/PNG | ≤1GB, 3-90s (Reels) | Up to 10 |
 | Facebook | ≤30MB, JPG/PNG | 1 per post | Up to 10 images |
 | YouTube | — | Shorts ≤3min, H.264 | — |
-| LinkedIn | Up to 9 | ≤10min | Up to 9 |
+| LinkedIn | Up to 9 | ≤10min | Up to 9; or one PDF/PPT/PPTX/DOC/DOCX document ≤100MB, 300 pages |
 | X (Twitter) | Up to 4 | — | — |
 | Pinterest | 2:3 ratio ideal | Supported | 2-5 images |
 | Bluesky | Up to 4 | Not supported | — |
@@ -486,7 +492,7 @@ Upload 1-20 files per request.
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
-- Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos).
+- Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).
 - Check `skippedPlatforms` in the response — it tells you if any platform was skipped and why.
 - Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.

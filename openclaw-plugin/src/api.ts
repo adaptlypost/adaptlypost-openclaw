@@ -12,6 +12,7 @@ const TOKEN_PREFIX = "adaptly_";
 const MB = 1024 * 1024;
 const MAX_IMAGE_BYTES = 50 * MB;
 const MAX_VIDEO_BYTES = 1024 * MB;
+const MAX_DOCUMENT_BYTES = 100 * MB;
 const MAX_REMOTE_BYTES = 250 * MB;
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
@@ -208,6 +209,11 @@ const MIME_BY_EXT: Record<string, string> = {
   ".webp": "image/webp",
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
+  ".pdf": "application/pdf",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -216,9 +222,15 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/webp": ".webp",
   "video/mp4": ".mp4",
   "video/quicktime": ".mov",
+  "application/pdf": ".pdf",
+  "application/vnd.ms-powerpoint": ".ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 };
 
 export const SUPPORTED_MIME_TYPES = Object.keys(EXT_BY_MIME);
+const DOCUMENT_ACCEPT = SUPPORTED_MIME_TYPES.filter((mimeType) => mimeType.startsWith("application/")).join(",");
 
 const QUICKTIME_ATOMS = new Set(["moov", "mdat", "wide", "free", "skip"]);
 
@@ -226,8 +238,17 @@ function ascii(bytes: Uint8Array, start: number, end: number): string {
   return String.fromCharCode(...bytes.subarray(start, end));
 }
 
-function sniffMimeType(bytes: Uint8Array): string | undefined {
+const OLE2_EXTENSIONS = new Set([".doc", ".ppt"]);
+const ZIP_EXTENSIONS = new Set([".docx", ".pptx"]);
+
+function sniffMimeType(bytes: Uint8Array, name: string): string | undefined {
   if (bytes.length < 12) return undefined;
+  const ext = extname(name).toLowerCase();
+  if (ascii(bytes, 0, 5) === "%PDF-") return "application/pdf";
+  if (ascii(bytes, 0, 8) === "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") {
+    return OLE2_EXTENSIONS.has(ext) ? MIME_BY_EXT[ext] : undefined;
+  }
+  if (ascii(bytes, 0, 4) === "PK\x03\x04") return ZIP_EXTENSIONS.has(ext) ? MIME_BY_EXT[ext] : undefined;
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   if (ascii(bytes, 0, 8) === "\x89PNG\r\n\x1a\n") return "image/png";
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP") return "image/webp";
@@ -237,14 +258,20 @@ function sniffMimeType(bytes: Uint8Array): string | undefined {
   return undefined;
 }
 
-function requireMediaContent(bytes: Uint8Array, source: string): string {
-  const mimeType = sniffMimeType(bytes);
+function requireMediaContent(bytes: Uint8Array, source: string, name: string = source): string {
+  const mimeType = sniffMimeType(bytes, name);
   if (!mimeType) {
     throw new Error(
-      `${source} is not a JPEG, PNG, WebP, MP4 or QuickTime file. Its content was checked, not just its name.`,
+      `${source} is not a JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
     );
   }
   return mimeType;
+}
+
+function sizeLimitFor(mimeType: string): number {
+  if (mimeType.startsWith("image/")) return MAX_IMAGE_BYTES;
+  if (mimeType.startsWith("video/")) return MAX_VIDEO_BYTES;
+  return MAX_DOCUMENT_BYTES;
 }
 
 function formatBytes(bytes: number): string {
@@ -329,7 +356,7 @@ export async function resolveLocalMedia(cfg: PluginConfig, filePath: string): Pr
   const declaredMime = MIME_BY_EXT[extname(requested).toLowerCase()];
   if (!declaredMime) {
     throw new Error(
-      `Unsupported media type for "${filePath}". AdaptlyPost accepts .jpg, .jpeg, .png, .webp, .mp4 and .mov files.`,
+      `Unsupported media type for "${filePath}". AdaptlyPost accepts .jpg, .jpeg, .png, .webp, .mp4 and .mov files, and .pdf, .ppt, .pptx, .doc and .docx for LinkedIn documents.`,
     );
   }
 
@@ -351,7 +378,7 @@ export async function resolveLocalMedia(cfg: PluginConfig, filePath: string): Pr
 
   const info = await stat(real);
   if (!info.isFile()) throw new Error(`Not a regular file: ${real}`);
-  const limit = declaredMime.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+  const limit = sizeLimitFor(declaredMime);
   if (info.size > limit) {
     throw new Error(`${real} is ${formatBytes(info.size)}, over the ${formatBytes(limit)} upload limit.`);
   }
@@ -467,7 +494,7 @@ function httpsGet(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   return new Promise((resolveResponse, reject) => {
     const req = request(
       url,
-      { method: "GET", lookup: publicOnlyLookup, signal, headers: { Accept: "image/*,video/*" } },
+      { method: "GET", lookup: publicOnlyLookup, signal, headers: { Accept: `image/*,video/*,${DOCUMENT_ACCEPT}` } },
       resolveResponse,
     );
     req.on("error", reject);
@@ -530,9 +557,12 @@ export async function uploadRemoteUrl(
   signal?: AbortSignal,
 ): Promise<UploadedMedia> {
   const { body, url } = await downloadPublicMedia(sourceUrl, signal);
-  const mimeType = requireMediaContent(body, describeRemoteUrl(url));
+  const mimeType = requireMediaContent(body, describeRemoteUrl(url), url.pathname);
   if (mimeType.startsWith("image/") && body.length > MAX_IMAGE_BYTES) {
     throw new Error(`${describeRemoteUrl(url)} is over the ${formatBytes(MAX_IMAGE_BYTES)} image limit.`);
+  }
+  if (mimeType.startsWith("application/") && body.length > MAX_DOCUMENT_BYTES) {
+    throw new Error(`${describeRemoteUrl(url)} is over the ${formatBytes(MAX_DOCUMENT_BYTES)} document limit.`);
   }
   return uploadBuffer(cfg, body, `${fileStemFromUrl(url)}${EXT_BY_MIME[mimeType]}`, mimeType, signal);
 }

@@ -179,6 +179,31 @@ For bulk scheduling, configs can be set at two levels:
 - Ideal aspect ratio: 2:3 (1000x1500)
 - Carousels: 2-5 static images only (no video in carousels)
 
+## LinkedIn — `linkedinConfigs`
+
+Only used for `DOCUMENT` posts: one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages) that LinkedIn shows as a swipeable document. Target only `LINKEDIN` and put the single file URL in `mediaUrls`.
+
+```json
+{
+  "contentType": "DOCUMENT",
+  "mediaUrls": ["https://cdn.adaptlypost.com/social-media-posts/uuid/q3-results.pdf"],
+  "linkedinConnectionIds": ["linkedin-connection-id"],
+  "linkedinConfigs": [
+    {
+      "connectionId": "linkedin-connection-id",
+      "documentTitle": "Q3 results"
+    }
+  ]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | LinkedIn account connection ID |
+| `documentTitle` | string | no | Title shown on the document (max 100 chars). Defaults to the file name; ignored for other content types |
+
+LinkedIn text, image and video posts need no config object.
+
 ## Platforms Without Config Objects
 
 These platforms use only connection ID arrays — no additional config:
@@ -218,6 +243,6 @@ These platforms use only connection ID arrays — no additional config:
 
 - Uses `linkedinConnectionIds` array
 - Character limit: 3,000 (under 1,300 performs better)
-- Up to 9 images, or video up to 10 min
+- Up to 9 images, or video up to 10 min, or one document (see `linkedinConfigs` above)
 - Put links in comments, not post body (LinkedIn deprioritizes external links)
 - 3-5 hashtags max
