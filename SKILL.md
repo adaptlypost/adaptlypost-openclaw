@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.8.0
+version: 1.9.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -394,7 +394,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
 | **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
-| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY) |
+| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE: posts a video reel as a trial reel, shown to non-followers first) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle` |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (required), `title`, `link` |

@@ -187,7 +187,9 @@ function settingLines(params: Record<string, unknown>): string[] {
     );
   }
   for (const entry of configEntries(params, "instagramConfigs")) {
-    lines.push(`Instagram: ${String(entry.postType ?? "FEED")}`);
+    lines.push(
+      `Instagram: ${String(entry.postType ?? "FEED")}${nonEmpty(entry.trialGraduation) ? `, trial reel (${entry.trialGraduation})` : ""}`,
+    );
   }
   for (const entry of configEntries(params, "facebookConfigs")) {
     lines.push(
@@ -332,6 +334,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.tiktokPrivacyLevel,
     entry.youtubePrivacyStatus,
     entry.instagramPostType,
+    nonEmpty(entry.instagramTrialGraduation) ? `trial reel (${entry.instagramTrialGraduation})` : undefined,
     entry.facebookPostType,
     nonEmpty(entry.pinterestBoardId) ? `board ${entry.pinterestBoardId}` : undefined,
   ].filter(nonEmpty);

@@ -745,6 +745,9 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 **MetaVideoPostType (Instagram & Facebook):**
 `FEED`, `REEL`, `STORY`
 
+**InstagramTrialGraduation (`instagramConfigs[].trialGraduation`):**
+`MANUAL` (the owner shares the trial reel to followers in the Instagram app), `SS_PERFORMANCE` (Instagram shares it if it performs well)
+
 **YouTubePostType:**
 `VIDEO`, `SHORTS`
 

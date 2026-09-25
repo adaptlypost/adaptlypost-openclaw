@@ -129,6 +129,12 @@ const PlatformConfigFields = {
         postType: Type.Optional(
           Type.Union([Type.Literal("FEED"), Type.Literal("REEL"), Type.Literal("STORY")]),
         ),
+        trialGraduation: Type.Optional(
+          Type.Union([Type.Literal("MANUAL"), Type.Literal("SS_PERFORMANCE")], {
+            description:
+              "Publish the reel as a trial reel, shown to non-followers first. MANUAL: the owner shares it to followers in the Instagram app. SS_PERFORMANCE: Instagram shares it if it performs well. Video reels only; omit for a normal reel.",
+          }),
+        ),
       }),
     ),
   ),
