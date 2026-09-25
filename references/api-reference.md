@@ -192,7 +192,7 @@ List every post in the authenticated account group, any status, with pagination.
 - `limit` (integer, optional): Number of posts to return. Range: 1-100. Default: 20
 - `offset` (integer, optional): Number of posts to skip. Min: 0. Default: 0
 - `sortOrder` (string, optional): `NEWEST` or `OLDEST`. Default: `NEWEST`
-- `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value. `status` is accepted as an alias; any query parameter outside this list returns `400`.
+- `statuses` (PostStatus[], optional): Filter by one or more post statuses. Repeat the key per value. Any query parameter outside this list returns `400`.
 - `platforms` (PlatformType[], optional): Filter by one or more platforms. Repeat the key per value.
 - `startDate` (string, optional): Lower bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-20`).
 - `endDate` (string, optional): Upper bound on `scheduledAt`, or on `createdAt` for posts that were never scheduled (ISO 8601, e.g. `2026-07-22`).

@@ -240,7 +240,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0&platforms=FACEBOOK&platforms=TIKTOK"
 ```
 
-Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`; `status` and `platform` are accepted aliases, and any other query parameter returns `400`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
+Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`; any other query parameter returns `400`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
 
 ### 7. Get post details
 
