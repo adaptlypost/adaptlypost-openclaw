@@ -243,7 +243,7 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
 **Post status values:** `DRAFT`, `SCHEDULED`, `PENDING`, `PUBLISHING`, `COMPLETED`, `PARTIAL_FAILURE`, `FAILED`
 **Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
-The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
+The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds preview images we host (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts. It normally has one entry per media item, where an empty string means that item could not be rendered; a post whose media had already expired gets a single cover image instead. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
 
 ### GET /social-posts/:id
 

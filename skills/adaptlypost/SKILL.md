@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.9.1
+version: 1.9.2
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -249,7 +249,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID
 ```
 
-Returns the full post object (`text`, `contentType`, `status`, `scheduledAt`, `timezone`) with a `platforms` array carrying each target's `status` and `errorMessage`. Ids outside this token's account group return `404` `Post not found or access denied`. Use this before editing or publishing a draft; use step 10 when you only need per-platform outcomes and the `platformId`s for a retry.
+Returns the full post object (`text`, `contentType`, `status`, `scheduledAt`, `timezone`) with a `platforms` array carrying each target's `status` and `errorMessage`. Each platform entry also has `mediaUrls` and `previewUrls`. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so show `previewUrls` to the user instead. Ids outside this token's account group return `404` `Post not found or access denied`. Use this before editing or publishing a draft; use step 10 when you only need per-platform outcomes and the `platformId`s for a retry.
 
 ### 8. Cross-post to multiple platforms
 
