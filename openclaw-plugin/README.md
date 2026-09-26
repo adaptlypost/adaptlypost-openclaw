@@ -56,9 +56,15 @@ Four actions put something in public, so each one stops for your approval
 before it runs:
 
 - uploading media, since a stored file gets a public URL right away
-- scheduling a post
+- scheduling a post, including a recurring one, where the prompt also says how
+  it repeats (for example "Repeats weekly on Mon, Fri until 2026-12-31.")
 - publishing a post now
 - retrying failed platforms, which republishes immediately
+
+Unscheduling a post and pausing, resuming or deleting a recurring post also stop
+for approval. The prompt names the series, its schedule, its accounts and its
+text. A token whose role cannot change a scheduled series is refused before the
+prompt.
 
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
@@ -101,10 +107,15 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
 | `adaptlypost_unschedule_post` | Take a scheduled post off the calendar and keep it as an undated draft. Needs approval. |
+| `adaptlypost_list_recurring_posts` | List recurring posts, filtered by `ACTIVE`, `PAUSED` or `ENDED`. |
+| `adaptlypost_get_recurring_post` | Read one recurring post, including why it paused. |
+| `adaptlypost_pause_recurring_post` | Stop a series and delete its upcoming scheduled post. Needs approval. |
+| `adaptlypost_resume_recurring_post` | Restart a paused series from the next date after now. Needs approval. |
+| `adaptlypost_delete_recurring_post` | Delete a series for good. Published posts stay. Needs approval. |
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Ten tools, not the nineteen the MCP server exposes. Post editing, deletion,
+Fifteen tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the
@@ -118,6 +129,12 @@ username, so they carry a `pageId` and go in `pageIds`.
 
 TikTok needs `privacyLevel` in `tiktokConfigs` and has no default. Pinterest
 needs `boardId`. Both reject the post outright without them.
+
+`recurrence` on `adaptlypost_create_post` repeats a post daily, weekly or
+monthly. It needs mode SCHEDULE, since the first post sets the time of day, and
+it cannot include TikTok. X and LinkedIn reject repeated identical text, so put
+spintax such as `{Hi|Hello}` in the caption. Editing a series or skipping one
+date happens in the AdaptlyPost app.
 
 Media has to reach storage before the post references it. `adaptlypost_upload_media`
 does the presign and the PUT together, so a post that names an unstored file

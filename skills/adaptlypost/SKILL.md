@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.9.1
+version: 1.10.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -53,8 +53,8 @@ A key carries the workspace role chosen when it was created, and never does more
 | Role | Can | Cannot |
 | --- | --- | --- |
 | `admin` | Everything, including connecting accounts and connect links | — |
-| `editor` | Create, schedule, publish, retry, edit and delete any post; upload media; manage webhooks | Connect or disconnect accounts, create connect links |
-| `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, delete anything but its own drafts, touch other members' posts, manage webhooks |
+| `editor` | Create, schedule, publish, retry, edit and delete any post; pause, resume and delete recurring posts; upload media; manage webhooks | Connect or disconnect accounts, create connect links |
+| `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, create or change recurring posts, delete anything but its own drafts, touch other members' posts, manage webhooks |
 | `viewer` | Read posts, accounts, analytics, webhooks | Any write |
 
 Once a write answers `403` with `requiredPermission` `posts.schedule` or `posts.publish`, every later post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
@@ -77,12 +77,12 @@ On `permission_denied`: stop. Do not retry, do not look for another key, do not 
 
 ## Safety rules — read before any write call
 
-Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry` and `POST /upload-urls` as a high-impact action.
+Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry`, `POST /recurring-posts/:id/resume` and `POST /upload-urls` as a high-impact action.
 
 1. **Confirm before every post.** Before calling `POST /social-posts`, show the user a summary and get an explicit "yes" covering all four items:
    - **Content** — exact text (and per-platform overrides), media filenames
    - **Platforms** — which networks and which connected accounts (by `displayName`/`username`, not just ID)
-   - **Timing** — "now", a specific scheduled time, or draft
+   - **Timing** — "now", a specific scheduled time, or draft. For a recurring post, also how often it repeats and when it stops
    - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType`, etc.
      A previous "yes" does not authorize a new post. Re-confirm each one.
 2. **Prefer drafts when uncertain.** If the user has not run this skill before, or the content is sensitive, default to `saveAsDraft: true` and let them review in the AdaptlyPost UI before publishing.
@@ -93,8 +93,8 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
    - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4` or `.mov` image or video. Key files, `.env` files, config and documents are never media.
    - Only download media from public `https://` URLs. Refuse `localhost`, private or link-local addresses (`10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, `::1`, `fc00::/7`) and cloud metadata hosts.
 5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop.
-6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing.
-7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Deleting a webhook silently stops the notifications someone else may rely on.
+6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing. A recurring post cannot be a draft, so an unattended run never creates one unless the user pre-authorized that exact series.
+7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
 8. **Connect links are secrets.** Only create one when the user asks for it, give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
 9. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect.
 
@@ -240,7 +240,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   "https://post.adaptlypost.com/post/api/v1/social-posts?limit=20&offset=0&platforms=FACEBOOK&platforms=TIKTOK"
 ```
 
-Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`; any other query parameter returns `400`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome.
+Returns `{ "posts": [...], "total": 25, "hasMore": true }` for every post in the token's account group, any status, newest first by default. Pagination: `limit` (1-100, default 20), `offset` (default 0); page while `hasMore` is true. Optional filters: `statuses` and `platforms` (repeat the key per value, e.g. `platforms=FACEBOOK&platforms=TIKTOK`; any other query parameter returns `400`), `startDate`/`endDate` (ISO 8601, bounding `scheduledAt`, or `createdAt` for posts that were never scheduled), and `sortOrder` (`NEWEST` or `OLDEST`). Use this to find post ids and to see what is already queued; use step 7 for one post's full record and step 10 for its per-platform outcome. A post created by a recurring post carries its `recurringPostId` and `occurrenceAt` (step 12); both are `null` on other posts.
 
 ### 7. Get post details
 
@@ -249,7 +249,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   https://post.adaptlypost.com/post/api/v1/social-posts/POST_ID
 ```
 
-Returns the full post object (`text`, `contentType`, `status`, `scheduledAt`, `timezone`) with a `platforms` array carrying each target's `status` and `errorMessage`. Ids outside this token's account group return `404` `Post not found or access denied`. Use this before editing or publishing a draft; use step 10 when you only need per-platform outcomes and the `platformId`s for a retry.
+Returns the full post object (`text`, `contentType`, `status`, `scheduledAt`, `timezone`, `recurringPostId`, `occurrenceAt`) with a `platforms` array carrying each target's `status` and `errorMessage`. Ids outside this token's account group return `404` `Post not found or access denied`. Use this before editing or publishing a draft; use step 10 when you only need per-platform outcomes and the `platformId`s for a retry.
 
 ### 8. Cross-post to multiple platforms
 
@@ -338,7 +338,56 @@ Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns 
 
 `POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. Omit `scheduledAt` (or pass a past time) and the post moves to `PENDING` with a publishing job queued per platform, so the content reaches the networks within moments and cannot be recalled. A future `scheduledAt` sets `SCHEDULED` and queues nothing yet. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
 
-### 12. Connect an account without handling credentials
+### 12. Repeat a post on a schedule
+
+Add `recurrence` to `POST /social-posts` and the post repeats on its own. `scheduledAt` is the first post and sets the time of day; `timezone` decides which local day and time that is for every later post.
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["LINKEDIN"],
+    "contentType": "TEXT",
+    "text": "{Hi|Hello} everyone, here is the tip of the week",
+    "timezone": "Europe/Berlin",
+    "scheduledAt": "2026-10-05T07:00:00.000Z",
+    "linkedinConnectionIds": ["LINKEDIN_ID"],
+    "recurrence": { "frequency": "WEEKLY", "weekdays": ["MONDAY", "FRIDAY"], "endsOn": "2026-12-31" }
+  }'
+```
+
+`recurrence` fields:
+
+- `frequency` (required): `DAILY`, `WEEKLY` or `MONTHLY`
+- `interval`: repeat every N days, weeks or months, 1 to 30, default 1
+- `weekdays`: `WEEKLY` only, for example `["MONDAY", "FRIDAY"]`. The weekday of `scheduledAt` is always included
+- `endsOn`: `YYYY-MM-DD`, the last day a post may go out on (inclusive). It must be on or after the day of the first post
+- `maxOccurrences`: total number of posts the series publishes, 2 to 365
+
+Send `endsOn` or `maxOccurrences`, not both. With neither, the post repeats until it is paused or deleted.
+
+`recurrence` needs a future `scheduledAt`, so the key must be able to schedule. It cannot be combined with `saveAsDraft: true`, and TikTok accounts cannot be in a recurring post. Each broken rule returns `400` with a message that says what to change. Only `POST /social-posts` takes `recurrence`: `PATCH`, bulk items and `/publish` do not. The response adds `recurringPostId`, and its `postId` is the first post.
+
+Only the next post of an active series exists, as a `SCHEDULED` post created about 24 hours ahead. It carries `recurringPostId` and `occurrenceAt`, the series slot it fills, which stays the same if that post is rescheduled. Deleting that one post skips that date and the series goes on. Dates missed while the series is paused are skipped, never published late. X and LinkedIn reject a post whose text matches an earlier one, so put spintax such as `{Hi|Hello}` in the text so each post differs.
+
+Manage the series:
+
+```bash
+curl -s        ".../recurring-posts?statuses=ACTIVE&statuses=PAUSED"
+curl -s        .../recurring-posts/RECURRING_POST_ID
+curl -X POST   .../recurring-posts/RECURRING_POST_ID/pause
+curl -X POST   .../recurring-posts/RECURRING_POST_ID/resume
+curl -X DELETE .../recurring-posts/RECURRING_POST_ID
+```
+
+The list returns `{ "recurringPosts": [...], "total", "hasMore" }`, with `limit` (1-100, default 20), `offset` and a repeated `statuses` filter (`ACTIVE`, `PAUSED`, `ENDED`). Each recurring post has `status`, `pauseReason`, `lastError`, `frequency`, `interval`, `weekdays`, `startsAt`, `timezone`, `endsOn`, `maxOccurrences`, `nextOccurrenceAt`, `occurrenceCount` (posts created so far), the content and a `platforms` array. An unknown id returns `404` `Recurring post not found`.
+
+Pause stops new posts and deletes the upcoming scheduled one. Resume continues from the next date after now. Delete stops the series and deletes its upcoming scheduled post; posts that already went out stay up. All three change a scheduled series, so they need an Editor or Admin key: a Contributor key gets `403 permission_denied`. Confirm pause and delete first (Safety rule 7). Resume puts posts back on the calendar, so confirm it like any scheduled post.
+
+A series also pauses itself. `pauseReason` says why: `USER` (someone paused it), `CONSECUTIVE_FAILURES` (3 failed posts in a row), `SUBSCRIPTION_INACTIVE`, `ACCESS_LOST` (its creator lost workspace access), `CONNECTION_REMOVED` (one of its accounts was disconnected) or `INVALID_CONTENT` (a platform rejected the content), with the last error in `lastError`. Tell the user the reason and fix the cause before resuming. Editing a series or skipping a single date happens in the AdaptlyPost app; the API has no endpoint for either.
+
+### 13. Connect an account without handling credentials
 
 When someone else owns the social account, and the user asks for a link, mint one instead of asking for a password:
 
@@ -351,7 +400,7 @@ Returns `{ "url", "token", "expiresAt" }`. Give the `url` to the user who asked 
 
 Never ask a user for a social platform password. This endpoint exists so you never have to.
 
-### 13. Get notified instead of polling
+### 14. Get notified instead of polling
 
 Register a webhook once and stop asking whether a post published. Only register a URL the user gave you. Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
 
@@ -366,7 +415,7 @@ Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.fa
 
 The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 
-### 14. Read the numbers
+### 15. Read the numbers
 
 Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
 
@@ -473,6 +522,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - If the user says "post now", "publish now", or "right away": **completely omit `scheduledAt` from the request body** — do NOT set it to a time in the near future. The API publishes immediately when `scheduledAt` is absent.
 - If the user says "schedule": ask for the date and time, then set `scheduledAt` to an ISO 8601 timestamp.
 - If the user says "draft": set `saveAsDraft: true` and omit `scheduledAt`.
+- If the user says "every Monday", "daily" or "each month": ask for the first date and time and for when it stops (an end date, a number of posts, or never), then send `recurrence` with a future `scheduledAt` (step 12). A recurring post cannot be a draft.
 
 ### Timezone handling
 
@@ -492,11 +542,12 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
+- A recurring post repeats the same text, which X and LinkedIn reject as a duplicate. Put spintax such as `{Hi|Hello}` in the text so each post differs.
 - Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).
 - Check `skippedPlatforms` in the response — it tells you if any platform was skipped and why.
 - Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.
 - Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.
 - Retry only `FAILED` rows, by `platformId` from the results endpoint, and only after the cause is fixed.
-- For performance questions use `/analytics/*` with an explicit window (step 14); `/results` is delivery status, not reach. A `null` metric means the platform does not report it.
+- For performance questions use `/analytics/*` with an explicit window (step 15); `/results` is delivery status, not reach. A `null` metric means the platform does not report it.
 - On `403 permission_denied`, stop and report `message` and `requiredPermission`. A retry, another key of the same role or another endpoint gets the same answer.

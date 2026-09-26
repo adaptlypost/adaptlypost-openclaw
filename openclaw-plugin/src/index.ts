@@ -13,8 +13,11 @@ import {
   ApprovalLedger,
   buildPostBody,
   CREATE_POST_TOOL,
+  DELETE_RECURRING_TOOL,
   describeApproval,
   GATED_TOOLS,
+  PAUSE_RECURRING_TOOL,
+  RESUME_RECURRING_TOOL,
   RETRY_TOOL,
   UNSCHEDULE_TOOL,
   UPLOAD_TOOL,
@@ -45,6 +48,55 @@ const PostStatus = Type.Union([
   Type.Literal("PARTIAL_FAILURE"),
   Type.Literal("FAILED"),
 ]);
+
+const RecurringPostStatus = Type.Union([Type.Literal("ACTIVE"), Type.Literal("PAUSED"), Type.Literal("ENDED")]);
+
+const Weekday = Type.Union([
+  Type.Literal("MONDAY"),
+  Type.Literal("TUESDAY"),
+  Type.Literal("WEDNESDAY"),
+  Type.Literal("THURSDAY"),
+  Type.Literal("FRIDAY"),
+  Type.Literal("SATURDAY"),
+  Type.Literal("SUNDAY"),
+]);
+
+const Recurrence = Type.Object(
+  {
+    frequency: Type.Union([Type.Literal("DAILY"), Type.Literal("WEEKLY"), Type.Literal("MONTHLY")], {
+      description: "How often the post repeats.",
+    }),
+    interval: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 30, description: "Repeat every N days, weeks or months. Defaults to 1." }),
+    ),
+    weekdays: Type.Optional(
+      Type.Array(Weekday, {
+        description: "WEEKLY only: the weekdays it goes out on. The weekday of scheduledAt is always included.",
+      }),
+    ),
+    endsOn: Type.Optional(
+      Type.String({
+        description:
+          "Last day a post may go out on, YYYY-MM-DD, inclusive. On or after the day of the first post. Not with maxOccurrences.",
+      }),
+    ),
+    maxOccurrences: Type.Optional(
+      Type.Integer({
+        minimum: 2,
+        maximum: 365,
+        description: "Total number of posts the series publishes. Not with endsOn; omit both to repeat until paused or deleted.",
+      }),
+    ),
+  },
+  {
+    description:
+      "Repeat the post. Needs mode SCHEDULE: scheduledAt is the first post and sets the time of day in timezone. Not for drafts or TikTok. X and LinkedIn reject repeated identical text, so put spintax such as {Hi|Hello} in the text.",
+  },
+);
+
+const RecurringPostId = Type.String({
+  description: "Recurring post id, from adaptlypost_list_recurring_posts or the recurringPostId of adaptlypost_create_post.",
+});
 
 const AnalyticsSortMetric = Type.Union([
   Type.Literal("VIEWS"),
@@ -291,7 +343,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -345,6 +397,7 @@ export default definePluginEntry({
           }),
         ),
         thumbnailUrl: Type.Optional(Type.String({ description: "Custom thumbnail for video posts." })),
+        recurrence: Type.Optional(Recurrence),
         ...ConnectionIdFields,
         ...PlatformConfigFields,
       }),
@@ -374,7 +427,7 @@ export default definePluginEntry({
       name: "adaptlypost_list_posts",
       label: "AdaptlyPost: list posts",
       description:
-        "List posts in the token's workspace, any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Check what is already queued before adding more: stacking several posts onto one account in a short window is the most common cause of a platform restriction. Use adaptlypost_post_results for one post's per-platform outcomes and retry ids.",
+        "List posts in the token's workspace, any status, newest first by default. Returns { posts, total, hasMore }; each post carries its status and a platforms array with per-platform status. Filters: statuses, platforms (posts targeting any of them), and startDate/endDate, which bound scheduledAt, or createdAt for posts never scheduled. limit is 1 to 100 (default 20); page with offset while hasMore is true. Check what is already queued before adding more: stacking several posts onto one account in a short window is the most common cause of a platform restriction. Use adaptlypost_post_results for one post's per-platform outcomes and retry ids. A post created by a recurring post carries recurringPostId and occurrenceAt (the series slot it fills); both are null on other posts.",
       parameters: Type.Object({
         statuses: Type.Optional(
           Type.Array(PostStatus, { description: "Filter by post status; omit for all statuses." }),
@@ -479,6 +532,92 @@ export default definePluginEntry({
         const { post_id: postId } = params as { post_id: string };
         return jsonResult(
           await callApi(cfg(), "POST", `/social-posts/${encodeURIComponent(postId)}/unschedule`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_recurring_posts",
+      label: "AdaptlyPost: list recurring posts",
+      description:
+        "List the recurring posts (series made by adaptlypost_create_post with recurrence) in the token's workspace. Returns { recurringPosts, total, hasMore }; each has id, status (ACTIVE, PAUSED or ENDED), pauseReason when paused, lastError, frequency, interval, weekdays, startsAt, timezone, endsOn, maxOccurrences, nextOccurrenceAt, occurrenceCount (posts created so far), the content and platforms. Only the next post of an active series exists, as a SCHEDULED post created about a day ahead; deleting that one post skips that date and the series goes on. A series pauses itself after 3 failed posts in a row (CONSECUTIVE_FAILURES), when the subscription lapses, when its creator loses workspace access, when one of its accounts is disconnected, or when a platform rejects the content. limit is 1 to 100 (default 20); page with offset while hasMore is true.",
+      parameters: Type.Object({
+        statuses: Type.Optional(
+          Type.Array(RecurringPostStatus, { description: "Filter by series status; omit for all statuses." }),
+        ),
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: "1 to 100, defaults to 20." })),
+        offset: Type.Optional(
+          Type.Integer({
+            minimum: 0,
+            description: "Recurring posts to skip; increase by limit while hasMore is true.",
+          }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/recurring-posts", {
+            query: params as Record<string, unknown>,
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_get_recurring_post",
+      label: "AdaptlyPost: get a recurring post",
+      description:
+        "Get one recurring post by id, in the shape of adaptlypost_list_recurring_posts entries. Use it to see why a series paused (pauseReason, lastError) before resuming it, or what it will post next. Fails with 404 'Recurring post not found' for an id outside the token's workspace. Editing a series or skipping one date is only possible in the AdaptlyPost app.",
+      parameters: Type.Object({ recurring_post_id: RecurringPostId }),
+      async execute(_toolCallId, params, signal) {
+        const { recurring_post_id: recurringPostId } = params as { recurring_post_id: string };
+        return jsonResult(
+          await callApi(cfg(), "GET", `/recurring-posts/${encodeURIComponent(recurringPostId)}`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: PAUSE_RECURRING_TOOL,
+      label: "AdaptlyPost: pause a recurring post",
+      description:
+        "Pause a recurring post: it stops creating posts and its upcoming scheduled post is deleted. Dates missed while paused are skipped, never published late. Every call pauses for the user's approval. Needs an Editor or Admin key; a Contributor key is refused before the prompt. Returns the recurring post with status PAUSED and pauseReason USER. Resume it with adaptlypost_resume_recurring_post.",
+      parameters: Type.Object({ recurring_post_id: RecurringPostId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, PAUSE_RECURRING_TOOL, params);
+        const { recurring_post_id: recurringPostId } = params as { recurring_post_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/recurring-posts/${encodeURIComponent(recurringPostId)}/pause`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: RESUME_RECURRING_TOOL,
+      label: "AdaptlyPost: resume a recurring post",
+      description:
+        "Resume a paused recurring post. It continues from the next date after now; dates missed while paused are not published. Every call pauses for the user's approval, since the series starts posting its saved content again. If it paused itself, read pauseReason and lastError with adaptlypost_get_recurring_post and fix the cause first (reconnect the account, renew the subscription, fix the content). Needs an Editor or Admin key; a Contributor key is refused before the prompt. Returns the recurring post; a series whose end already passed comes back ENDED.",
+      parameters: Type.Object({ recurring_post_id: RecurringPostId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, RESUME_RECURRING_TOOL, params);
+        const { recurring_post_id: recurringPostId } = params as { recurring_post_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/recurring-posts/${encodeURIComponent(recurringPostId)}/resume`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: DELETE_RECURRING_TOOL,
+      label: "AdaptlyPost: delete a recurring post",
+      description:
+        "Delete a recurring post for good: the series stops and its upcoming scheduled post is deleted. Posts that already went out are kept on AdaptlyPost and on each network. Irreversible, so every call pauses for the user's approval; prefer adaptlypost_pause_recurring_post when the user may want it back. To skip one date only, delete nothing here: the user skips it in the AdaptlyPost app. Needs an Editor or Admin key; a Contributor key is refused before the prompt. Returns { deleted: true }.",
+      parameters: Type.Object({ recurring_post_id: RecurringPostId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, DELETE_RECURRING_TOOL, params);
+        const { recurring_post_id: recurringPostId } = params as { recurring_post_id: string };
+        return jsonResult(
+          await callApi(cfg(), "DELETE", `/recurring-posts/${encodeURIComponent(recurringPostId)}`, { signal }),
         );
       },
     });

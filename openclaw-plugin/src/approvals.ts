@@ -14,7 +14,18 @@ export const UPLOAD_TOOL = "adaptlypost_upload_media";
 export const CREATE_POST_TOOL = "adaptlypost_create_post";
 export const RETRY_TOOL = "adaptlypost_retry_failed";
 export const UNSCHEDULE_TOOL = "adaptlypost_unschedule_post";
-export const GATED_TOOLS = [UPLOAD_TOOL, CREATE_POST_TOOL, RETRY_TOOL, UNSCHEDULE_TOOL] as const;
+export const PAUSE_RECURRING_TOOL = "adaptlypost_pause_recurring_post";
+export const RESUME_RECURRING_TOOL = "adaptlypost_resume_recurring_post";
+export const DELETE_RECURRING_TOOL = "adaptlypost_delete_recurring_post";
+export const GATED_TOOLS = [
+  UPLOAD_TOOL,
+  CREATE_POST_TOOL,
+  RETRY_TOOL,
+  UNSCHEDULE_TOOL,
+  PAUSE_RECURRING_TOOL,
+  RESUME_RECURRING_TOOL,
+  DELETE_RECURRING_TOOL,
+] as const;
 
 export const APPROVAL_TIMEOUT_MS = 300_000;
 const GRANT_TTL_MS = 60_000;
@@ -135,11 +146,85 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
 
+type Recurrence = {
+  frequency?: string;
+  interval?: number;
+  weekdays?: string[];
+  endsOn?: string;
+  maxOccurrences?: number;
+};
+
+const WEEKDAY_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun",
+};
+
+const FREQUENCY_LABELS: Record<string, { once: string; unit: string }> = {
+  DAILY: { once: "daily", unit: "days" },
+  WEEKLY: { once: "weekly", unit: "weeks" },
+  MONTHLY: { once: "monthly", unit: "months" },
+};
+
+function weekdayOf(instant: string, timeZone: string): string | undefined {
+  try {
+    return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone }).format(new Date(instant)).toUpperCase();
+  } catch {
+    return undefined;
+  }
+}
+
+export function describeRecurrence(rule: Recurrence): string {
+  const frequency = String(rule.frequency);
+  const labels = FREQUENCY_LABELS[frequency] ?? { once: frequency.toLowerCase(), unit: frequency.toLowerCase() };
+  const interval = typeof rule.interval === "number" ? rule.interval : 1;
+  const every = interval > 1 ? `every ${interval} ${labels.unit}` : labels.once;
+  const weekdays = stringArray(rule.weekdays);
+  const days = frequency === "WEEKLY" ? WEEKDAY_ORDER.filter((day) => weekdays.includes(day)) : [];
+  const on = days.length ? ` on ${days.map((day) => WEEKDAY_LABELS[day]).join(", ")}` : "";
+  const ends = nonEmpty(rule.endsOn)
+    ? ` until ${rule.endsOn.slice(0, 10)}`
+    : typeof rule.maxOccurrences === "number"
+      ? `, ${rule.maxOccurrences} posts in total`
+      : " until paused or deleted";
+  return `Repeats ${every}${on}${ends}.`;
+}
+
+function recurrenceOf(params: Record<string, unknown>): Recurrence | undefined {
+  return params.recurrence && typeof params.recurrence === "object" ? (params.recurrence as Recurrence) : undefined;
+}
+
+function requireValidRecurrence(mode: PostMode | undefined, params: Record<string, unknown>): void {
+  if (params.recurrence === undefined) return;
+  const recurrence = recurrenceOf(params);
+  if (!recurrence || !nonEmpty(recurrence.frequency)) {
+    throw new Error("recurrence needs a frequency: DAILY, WEEKLY or MONTHLY.");
+  }
+  if (mode !== "SCHEDULE") {
+    throw new Error(
+      "recurrence needs mode SCHEDULE with a future scheduledAt for the first post. A recurring post cannot be a draft or go out now.",
+    );
+  }
+  if (recurrence.endsOn !== undefined && recurrence.maxOccurrences !== undefined) {
+    throw new Error("recurrence takes endsOn or maxOccurrences, not both. Omit both to repeat until paused or deleted.");
+  }
+  if (stringArray(params.platforms).includes("TIKTOK")) {
+    throw new Error("TikTok posts cannot repeat. Remove TIKTOK from platforms, or drop recurrence.");
+  }
+}
+
 export function buildPostBody(params: Record<string, unknown>): Record<string, unknown> {
   const { mode, scheduledAt, ...rest } = params as { mode?: PostMode; scheduledAt?: unknown } & Record<
     string,
     unknown
   >;
+  requireValidRecurrence(mode, params);
 
   switch (mode) {
     case "DRAFT":
@@ -240,6 +325,13 @@ function refusedAction(me: KeyCapabilities | undefined, publishNow: boolean): st
   return undefined;
 }
 
+function withFirstWeekday(recurrence: Recurrence, scheduledAt: string, timezone: string): Recurrence {
+  if (recurrence.frequency !== "WEEKLY") return recurrence;
+  const first = weekdayOf(scheduledAt, timezone);
+  const weekdays = stringArray(recurrence.weekdays);
+  return first && !weekdays.includes(first) ? { ...recurrence, weekdays: [...weekdays, first] } : recurrence;
+}
+
 async function describePost(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest | undefined> {
   const body = buildPostBody(params);
   if (params.mode === "DRAFT") return undefined;
@@ -264,19 +356,26 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
 
   const publishNow = params.mode === "PUBLISH_NOW";
   const refused = refusedAction(me, publishNow);
+  const recurrence = recurrenceOf(params);
+  if (refused && recurrence && me) {
+    throw new Error(
+      `This key has the ${me.role.name} role, which cannot schedule, and a recurring post cannot be saved as a draft, so nothing was created. Save a single post with mode DRAFT instead, or ask a workspace member with an Editor or Admin role to set up the repeat in the AdaptlyPost app.`,
+    );
+  }
   const accountCount = `${targets.length} account${targets.length === 1 ? "" : "s"}`;
   const title = refused
     ? `Key cannot ${refused}: save as draft for ${accountCount}?`
-    : `${publishNow ? "Publish now" : "Schedule a post"} to ${accountCount}`;
+    : `${publishNow ? "Publish now" : recurrence ? "Schedule a recurring post" : "Schedule a post"} to ${accountCount}`;
   const media = stringArray(params.mediaUrls).map(fileName);
   const altTextCount = stringArray(params.mediaAltTexts).filter((altText) => altText.trim()).length;
   const timing = publishNow
     ? "Publishes immediately and cannot be recalled."
-    : `Scheduled for ${String(body.scheduledAt)}${nonEmpty(params.timezone) ? ` (${params.timezone})` : ""}.`;
+    : `${recurrence ? "First post" : "Scheduled for"} ${String(body.scheduledAt)}${nonEmpty(params.timezone) ? ` (${params.timezone})` : ""}.`;
   const lines = [
     refused && me
       ? `AdaptlyPost will refuse to ${refused}: this key has the ${me.role.name} role. Approve to save the post below as a draft for a workspace member to ${refused}; deny to do nothing.`
       : timing,
+    ...(recurrence ? [describeRecurrence(withFirstWeekday(recurrence, String(body.scheduledAt), nonEmpty(params.timezone) ? params.timezone : "UTC"))] : []),
     `Accounts: ${targets.join(", ")}`,
     ...settingLines(params),
     ...(media.length ? [`Media: ${media.join(", ")}`] : []),
@@ -440,6 +539,119 @@ async function describeUnschedule(cfg: PluginConfig, params: Record<string, unkn
   };
 }
 
+type RecurringPostRecord = PostRecord &
+  Recurrence & {
+    status?: string;
+    pauseReason?: string;
+    occurrenceCount?: number;
+    mediaUrls?: string[];
+  };
+
+type SeriesChange = {
+  verb: string;
+  effect: string;
+  allowed: (me: KeyCapabilities) => boolean;
+  showsContent: boolean;
+  severity: ApprovalRequest["severity"];
+  visibility: ApprovalRequest["scope"]["visibility"];
+};
+
+const SERIES_CHANGES: Record<string, SeriesChange> = {
+  [PAUSE_RECURRING_TOOL]: {
+    verb: "Pause",
+    effect:
+      "Stops the series and deletes its upcoming scheduled post. Dates missed while paused are skipped, not published later.",
+    allowed: (me) => me.can.schedule,
+    showsContent: false,
+    severity: "warning",
+    visibility: "restricted",
+  },
+  [RESUME_RECURRING_TOOL]: {
+    verb: "Resume",
+    effect: "Posts the content below again from the next date after now. Dates missed while paused stay skipped.",
+    allowed: (me) => me.can.schedule,
+    showsContent: true,
+    severity: "warning",
+    visibility: "public",
+  },
+  [DELETE_RECURRING_TOOL]: {
+    verb: "Delete",
+    effect:
+      "Stops the series for good and deletes its upcoming scheduled post. Posts already published stay up. This cannot be undone.",
+    allowed: (me) => !Array.isArray(me.permissions) || me.permissions.includes("posts.delete"),
+    showsContent: false,
+    severity: "critical",
+    visibility: "restricted",
+  },
+};
+
+function seriesStateLine(series: RecurringPostRecord): string {
+  const count = typeof series.occurrenceCount === "number" ? ` ${series.occurrenceCount} posts so far.` : "";
+  const status =
+    series.status && series.status !== "ACTIVE"
+      ? ` Status: ${series.status}${nonEmpty(series.pauseReason) ? ` (${series.pauseReason})` : ""}.`
+      : "";
+  return `${describeRecurrence(series)}${count}${status}`;
+}
+
+async function describeSeriesChange(
+  cfg: PluginConfig,
+  toolName: string,
+  params: Record<string, unknown>,
+): Promise<ApprovalRequest> {
+  const change = SERIES_CHANGES[toolName];
+  const recurringPostId = String(params.recurring_post_id ?? "");
+  const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const me = await keyCapabilities(cfg, signal);
+  if (me && !change.allowed(me)) {
+    throw new Error(
+      `This key has the ${me.role.name} role, which cannot ${change.verb.toLowerCase()} recurring posts, so AdaptlyPost would refuse with 403 permission_denied. Nothing was changed. Tell the user a workspace member with an Editor or Admin role has to do it in the AdaptlyPost app, or give the agent a key with that role.`,
+    );
+  }
+  const series = (await callApi(cfg, "GET", `/recurring-posts/${encodeURIComponent(recurringPostId)}`, {
+    signal,
+  }).catch((error: unknown) => {
+    throw lookupFailed(`recurring post ${recurringPostId}`, error);
+  })) as RecurringPostRecord;
+
+  const platforms = series.platforms ?? [];
+  const accounts = platforms.map(
+    (entry) => `${PLATFORM_LABELS[entry.platform] ?? entry.platform} ${String(entry.accountName ?? entry.id)}`,
+  );
+  const title = `${change.verb} a recurring post`;
+  const header = [change.effect, seriesStateLine(series), ...(accounts.length ? [`Accounts: ${accounts.join(", ")}`] : [])];
+  const target = platforms.map((entry) => PLATFORM_LABELS[entry.platform] ?? entry.platform).join(", ") || recurringPostId;
+  const scope = { kind: "external-post" as const, target, visibility: change.visibility };
+
+  if (!change.showsContent) {
+    const text = nonEmpty(series.text) ? series.text : undefined;
+    const preview = text && text.length > UNSCHEDULE_TEXT_PREVIEW ? `${text.slice(0, UNSCHEDULE_TEXT_PREVIEW)}…` : text;
+    return {
+      title,
+      description: [...header, `Text: ${preview ? `"${preview}"` : "(none)"}`].join("\n").slice(0, DESCRIPTION_LIMIT),
+      severity: change.severity,
+      scope,
+    };
+  }
+
+  const media = stringArray(series.mediaUrls).map(fileName);
+  const overrides = platforms
+    .filter((entry) => nonEmpty(entry.text) && entry.text !== series.text)
+    .map((entry) => `${PLATFORM_LABELS[entry.platform] ?? entry.platform} text: "${String(entry.text)}"`);
+  const lines = [
+    ...header,
+    ...(media.length ? [`Media: ${media.join(", ")}`] : []),
+    `Text: ${nonEmpty(series.text) ? `"${series.text}"` : "(none)"}`,
+    ...overrides,
+  ];
+  return {
+    title,
+    description: requireFullPrompt(title, lines, "Let the user resume it from the AdaptlyPost app."),
+    severity: change.severity,
+    scope,
+  };
+}
+
 export async function describeApproval(
   cfg: PluginConfig,
   toolName: string,
@@ -454,6 +666,10 @@ export async function describeApproval(
       return describeRetry(cfg, params);
     case UNSCHEDULE_TOOL:
       return describeUnschedule(cfg, params);
+    case PAUSE_RECURRING_TOOL:
+    case RESUME_RECURRING_TOOL:
+    case DELETE_RECURRING_TOOL:
+      return describeSeriesChange(cfg, toolName, params);
     default:
       return undefined;
   }

@@ -20,12 +20,12 @@ Which permission each endpoint needs:
 
 | Endpoint | Permission | Roles |
 | --- | --- | --- |
-| `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results` | `posts.read` | all |
+| `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results`, `GET /recurring-posts`, `GET /recurring-posts/:id` | `posts.read` | all |
 | `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` | `posts.draft` | admin, editor, contributor |
-| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt`; `PATCH /social-posts/:id` on a post that is not a `DRAFT`; `POST /social-posts/bulk` | `posts.schedule` | admin, editor |
+| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `PATCH /social-posts/:id` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
 | `POST /social-posts` and `POST /social-posts/:id/publish` without `scheduledAt` or with a past one; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
-| `DELETE /social-posts/:id` on a post that is not a `DRAFT` | `posts.delete` | admin, editor |
-| Any write on a post another member created | the row above, plus `posts.others` | admin, editor |
+| `DELETE /social-posts/:id` on a post that is not a `DRAFT`; `DELETE /recurring-posts/:id` | `posts.delete` | admin, editor |
+| Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
 | `POST /social-accounts/:id/check`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
@@ -145,6 +145,7 @@ Create or schedule a post to one or more social media platforms.
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
+- `recurrence` (object): Repeats the post. See [Recurrence](#recurrence) below
 - `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (not the `pageId` field)
 - `tiktokConnectionIds` (string[]): TikTok account connection IDs
 - `threadsConnectionIds` (string[]): Threads account connection IDs
@@ -164,6 +165,35 @@ Create or schedule a post to one or more social media platforms.
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
+#### Recurrence
+
+`recurrence` repeats the post. The future `scheduledAt` is the first post and sets the time of day, and `timezone` decides which local day and time that is for every later post.
+
+```json
+{
+  "scheduledAt": "2026-10-05T07:00:00.000Z",
+  "timezone": "Europe/Berlin",
+  "recurrence": { "frequency": "WEEKLY", "weekdays": ["MONDAY", "FRIDAY"], "endsOn": "2026-12-31" }
+}
+```
+
+- `frequency` (string, required): `DAILY`, `WEEKLY` or `MONTHLY`
+- `interval` (integer): Repeat every N days, weeks or months. Range: 1-30. Default: 1
+- `weekdays` (Weekday[]): `WEEKLY` only. The weekday of `scheduledAt` is always included
+- `endsOn` (string): `YYYY-MM-DD`, the last day an occurrence may go out on (inclusive). Must be on or after the day of the first post
+- `maxOccurrences` (integer): Total number of posts the series publishes. Range: 2-365
+
+`endsOn` and `maxOccurrences` cannot be combined; with neither the post repeats until it is paused or deleted. Each rule below returns `400` with the message shown:
+
+- no `frequency`: `Choose how often the post repeats`
+- `saveAsDraft: true`: `A recurring post cannot be saved as a draft. Schedule it instead`
+- no future `scheduledAt`: `Pick a future date and time for the first post of a recurring series`
+- both `endsOn` and `maxOccurrences`: `Choose either an end date or a number of posts, not both`
+- `endsOn` before the first post: `The end date must be on or after the first post`
+- a TikTok account: `TIKTOK posts cannot repeat. Remove the account or turn off repeat`
+
+Only `POST /social-posts` takes `recurrence`. `PATCH /social-posts/:id`, bulk items and `POST /social-posts/:id/publish` do not. See [Recurring posts](#recurring-posts) for how the series runs.
+
 **Response:**
 
 ```json
@@ -177,9 +207,12 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
     }
   ],
   "isScheduled": true,
-  "scheduledAt": "2026-06-15T10:00:00.000Z"
+  "scheduledAt": "2026-06-15T10:00:00.000Z",
+  "recurringPostId": "cmr1a2b3c0000i0r5rcp0abcd"
 }
 ```
+
+`recurringPostId` is only present when the request carried `recurrence`; `postId` is then the first post of the series.
 
 `queuedPlatforms` confirms that publishing jobs were queued, not that they succeeded: each platform publishes asynchronously and on its own, so read `GET /social-posts/:id/results` for the outcome. A future `scheduledAt` returns `isScheduled: true` with status `SCHEDULED`; a missing or past `scheduledAt` publishes immediately with status `PENDING`; `saveAsDraft: true` stores a `DRAFT`.
 
@@ -220,6 +253,8 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
       "scheduledAt": "2026-06-15T10:00:00.000Z",
       "timezone": "America/New_York",
       "status": "DRAFT",
+      "recurringPostId": null,
+      "occurrenceAt": null,
       "platforms": [
         {
           "id": "cmm0z0k3u0001i0r5dlbfa440",
@@ -244,6 +279,8 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
 **Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
 The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
+
+`recurringPostId` names the recurring post this post is an occurrence of, and `occurrenceAt` is the series slot it fills, which stays the same when the post is rescheduled. Both are `null` on posts that are not part of a series.
 
 ### GET /social-posts/:id
 
@@ -489,6 +526,106 @@ Revoke a connect link before it is used or after it expires.
 **Response:** `{ "success": true }`
 
 Returns `404` when the token does not exist or belongs to another account group.
+
+## Recurring posts
+
+A recurring post is a series created by passing `recurrence` to `POST /social-posts`. Only the next occurrence of an `ACTIVE` series exists, as a `SCHEDULED` post created about 24 hours ahead with `recurringPostId` and `occurrenceAt` set. Deleting that one post skips that date and the series continues. Occurrences missed while the series is paused are skipped, never published late.
+
+X and LinkedIn reject a post whose text matches an earlier one. Put spintax such as `{Hi|Hello}` in the text so each occurrence differs.
+
+Editing a series and skipping one date are only possible in the AdaptlyPost app.
+
+Reading needs `posts.read`. A series counts as a scheduled post, so pause and resume need `posts.schedule` and delete needs `posts.delete` (admin, editor), plus `posts.others` on a series another member created. A Contributor key gets `403 permission_denied`.
+
+### GET /recurring-posts
+
+List the recurring posts in the account group.
+
+**Query parameters:**
+
+- `limit` (integer, optional): Range: 1-100. Default: 20
+- `offset` (integer, optional): Min: 0. Default: 0
+- `statuses` (RecurringPostStatus[], optional): Filter by status. Repeat the key per value. Any query parameter outside this list returns `400`.
+
+**Example:**
+
+```
+GET /recurring-posts?limit=20&statuses=ACTIVE&statuses=PAUSED
+```
+
+**Response:**
+
+```json
+{
+  "recurringPosts": [
+    {
+      "id": "cmr1a2b3c0000i0r5rcp0abcd",
+      "userId": "user_01KH48SNHMPJNFYPJWZVJAKXDS",
+      "status": "ACTIVE",
+      "frequency": "WEEKLY",
+      "interval": 1,
+      "weekdays": ["MONDAY", "FRIDAY"],
+      "startsAt": "2026-10-05T07:00:00.000Z",
+      "timezone": "Europe/Berlin",
+      "endsOn": "2026-12-31T00:00:00.000Z",
+      "nextOccurrenceAt": "2026-10-09T07:00:00.000Z",
+      "occurrenceCount": 1,
+      "contentType": "TEXT",
+      "text": "{Hi|Hello} everyone, here is the tip of the week",
+      "mediaUrls": [],
+      "platformTypes": ["LINKEDIN"],
+      "platforms": [
+        {
+          "id": "cmr1a2b3c0000i0r5rcp0abcd-0",
+          "platform": "LINKEDIN",
+          "status": "PENDING",
+          "connectionId": "cmlxly42t0004hzq1bh9kqpwl",
+          "accountName": "Jane Doe"
+        }
+      ],
+      "createdAt": "2026-09-26T12:00:00.000Z",
+      "updatedAt": "2026-09-26T12:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "hasMore": false
+}
+```
+
+**Fields:**
+
+- `status`: `ACTIVE`, `PAUSED` or `ENDED`
+- `pauseReason`: Set when `PAUSED`. `USER`, `CONSECUTIVE_FAILURES`, `SUBSCRIPTION_INACTIVE`, `ACCESS_LOST`, `CONNECTION_REMOVED` or `INVALID_CONTENT`
+- `lastError`: The error that paused the series, when there was one
+- `frequency`, `interval`, `weekdays`, `endsOn`, `maxOccurrences`: The rule from `recurrence`
+- `startsAt`: The first post's time; `timezone` is the series timezone
+- `nextOccurrenceAt`: The next slot that does not exist as a post yet. Absent once the series has ended
+- `occurrenceCount`: Posts the series has created so far
+- `contentType`, `text`, `mediaUrls`, `mediaAltTexts`, `thumbnailUrl`, `platformTypes`, `platforms`: The content and targets every occurrence copies
+
+A series pauses itself after 3 failed posts in a row (`CONSECUTIVE_FAILURES`), when the subscription lapses (`SUBSCRIPTION_INACTIVE`), when its creator loses workspace access (`ACCESS_LOST`), when one of its accounts is disconnected (`CONNECTION_REMOVED`), or when a platform rejects the content (`INVALID_CONTENT`). Fix the cause before resuming it.
+
+### GET /recurring-posts/:id
+
+One recurring post, in the same shape as a list entry. An id outside the account group returns `404` `Recurring post not found`.
+
+### POST /recurring-posts/:id/pause
+
+Stops creating occurrences and deletes the upcoming scheduled post. No request body.
+
+**Response:** the recurring post with `status: "PAUSED"` and `pauseReason: "USER"`.
+
+### POST /recurring-posts/:id/resume
+
+Continues from the next occurrence after now. Occurrences missed while paused are not published. A series whose end has already passed comes back as `ENDED`. No request body.
+
+**Response:** the recurring post with its new `status` and `nextOccurrenceAt`.
+
+### DELETE /recurring-posts/:id
+
+Stops the series and deletes its upcoming scheduled post. Posts that already went out are kept. Irreversible.
+
+**Response:** `{ "deleted": true }`
 
 ## Webhooks
 
@@ -763,6 +900,18 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 
 **YouTubeLicense:**
 `youtube`, `creativeCommon`
+
+**RecurrenceFrequency:**
+`DAILY`, `WEEKLY`, `MONTHLY`
+
+**Weekday:**
+`MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`, `FRIDAY`, `SATURDAY`, `SUNDAY`
+
+**RecurringPostStatus:**
+`ACTIVE`, `PAUSED`, `ENDED`
+
+**RecurringPostPauseReason:**
+`USER`, `CONSECUTIVE_FAILURES`, `SUBSCRIPTION_INACTIVE`, `ACCESS_LOST`, `CONNECTION_REMOVED`, `INVALID_CONTENT`
 
 **AnalyticsGranularity:**
 `DAILY`, `WEEKLY`, `MONTHLY`

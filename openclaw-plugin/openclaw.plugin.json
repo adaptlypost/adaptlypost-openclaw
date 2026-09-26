@@ -2,7 +2,7 @@
   "id": "adaptlypost",
   "name": "AdaptlyPost",
   "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads and Bluesky from OpenClaw, and read how they performed.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -33,6 +33,11 @@
       "adaptlypost_post_results",
       "adaptlypost_retry_failed",
       "adaptlypost_unschedule_post",
+      "adaptlypost_list_recurring_posts",
+      "adaptlypost_get_recurring_post",
+      "adaptlypost_pause_recurring_post",
+      "adaptlypost_resume_recurring_post",
+      "adaptlypost_delete_recurring_post",
       "adaptlypost_analytics_overview",
       "adaptlypost_post_analytics"
     ]
@@ -109,6 +114,56 @@
       ]
     },
     "adaptlypost_unschedule_post": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_recurring_posts": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_get_recurring_post": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_pause_recurring_post": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_resume_recurring_post": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_delete_recurring_post": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",
