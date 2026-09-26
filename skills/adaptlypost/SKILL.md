@@ -1,6 +1,6 @@
 ---
 name: adaptlypost
-description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
+description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
 version: 1.9.1
 required_environment_variables:
@@ -17,7 +17,7 @@ metadata:
 
 # AdaptlyPost
 
-Schedule social media posts across 10 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
+Schedule social media posts across 11 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
 
 ## What this skill touches
 
@@ -231,7 +231,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
 For carousel: upload multiple files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`.
 For a LinkedIn document (PDF, slide deck or Word file shown as a swipeable document): upload the one file (keep its extension in `fileName`), use `contentType: "DOCUMENT"`, put that single URL in `mediaUrls`, target only `LINKEDIN`, and optionally name it with `"linkedinConfigs": [{ "connectionId": "LINKEDIN_ID", "documentTitle": "Q3 results" }]` (max 100 chars, defaults to the file name). DOCUMENT on another platform, a second file, or a document on a non-DOCUMENT post returns 400.
-For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube and videos ignore it.
+For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube, Google Business Profile and videos ignore it.
 
 ### 6. List posts
 
@@ -368,7 +368,7 @@ The response contains a `whsec_` signing secret, and that is the only time it is
 
 ### 14. Read the numbers
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Google Business Profile reports location-level impressions only, with no per-post metrics. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
@@ -400,6 +400,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (required), `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
+| **Google Business Profile** | `googleBusinessConfigs` | `topicType` (required: STANDARD/EVENT/OFFER), `callToActionType`, `callToActionUrl`, `eventTitle`, `eventStart`, `eventEnd`, `offerCouponCode`, `offerRedeemUrl`, `offerTerms` |
 | **X (Twitter)** | — | No config object, uses `twitterConnectionIds` only |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds` only |
 | **Mastodon** | — | No config object, uses `mastodonConnectionIds` only |
@@ -459,6 +460,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 | Pinterest | 2:3 ratio ideal | Supported | 2-5 images |
 | Bluesky | Up to 4 | Not supported | — |
 | Mastodon | Up to 4 (server can allow more) | 1 per post | Up to 4 |
+| Google Business Profile | 1 JPEG/PNG, ≤5MB | Not supported | Not supported |
 | Threads | Supported | Supported | Up to 10 |
 
 ## Tips for the Agent
@@ -487,9 +489,10 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.
 - `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
-- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
+- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `googleBusinessConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
+- Google Business Profile: each connection id is one business location. Every `googleBusinessConfigs` entry needs `topicType`; `EVENT` and `OFFER` also need `eventTitle`, `eventStart` and `eventEnd` in the business's local time (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, no timezone). Text max 1500 characters. Keep phone numbers and emails out of the text, because Google removes those posts; use `callToActionType: CALL` instead. Google reviews each post and can reject it after publishing.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).

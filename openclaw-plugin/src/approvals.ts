@@ -89,6 +89,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   BLUESKY: "Bluesky",
   TWITTER: "X",
   MASTODON: "Mastodon",
+  GOOGLE_BUSINESS: "Google Business Profile",
 };
 
 const CONNECTION_FIELDS: Record<string, string> = {
@@ -102,6 +103,7 @@ const CONNECTION_FIELDS: Record<string, string> = {
   BLUESKY: "blueskyConnectionIds",
   TWITTER: "twitterConnectionIds",
   MASTODON: "mastodonConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
 
 type Account = { id: string; platform: string; displayName?: string; username?: string; pageId?: string };
@@ -174,6 +176,21 @@ function configEntries(params: Record<string, unknown>, key: string): ConfigEntr
   return Array.isArray(params[key]) ? (params[key] as ConfigEntry[]) : [];
 }
 
+function googleBusinessSettings(entry: ConfigEntry): string[] {
+  const button = nonEmpty(entry.callToActionType)
+    ? `button ${entry.callToActionType}${entry.callToActionType !== "CALL" && nonEmpty(entry.callToActionUrl) ? ` ${entry.callToActionUrl}` : ""}`
+    : undefined;
+  return [
+    String(entry.topicType ?? "STANDARD"),
+    nonEmpty(entry.eventTitle) ? `"${entry.eventTitle}"` : undefined,
+    nonEmpty(entry.eventStart) ? `${entry.eventStart} to ${String(entry.eventEnd ?? "?")}` : undefined,
+    button,
+    nonEmpty(entry.offerCouponCode) ? `coupon ${entry.offerCouponCode}` : undefined,
+    nonEmpty(entry.offerRedeemUrl) ? `redeem at ${entry.offerRedeemUrl}` : undefined,
+    nonEmpty(entry.offerTerms) ? `terms "${entry.offerTerms}"` : undefined,
+  ].filter(nonEmpty);
+}
+
 function settingLines(params: Record<string, unknown>): string[] {
   const lines: string[] = [];
   for (const entry of configEntries(params, "tiktokConfigs")) {
@@ -201,6 +218,9 @@ function settingLines(params: Record<string, unknown>): string[] {
     lines.push(
       `Pinterest: board ${String(entry.boardId)}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`,
     );
+  }
+  for (const entry of configEntries(params, "googleBusinessConfigs")) {
+    lines.push(`Google Business Profile: ${googleBusinessSettings(entry).join(", ")}`);
   }
   return lines;
 }
@@ -337,10 +357,16 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.instagramPostType,
     entry.facebookPostType,
     nonEmpty(entry.pinterestBoardId) ? `board ${entry.pinterestBoardId}` : undefined,
+    entry.googleBusinessTopicType,
+    nonEmpty(entry.googleBusinessCallToActionType) ? `button ${entry.googleBusinessCallToActionType}` : undefined,
   ].filter(nonEmpty);
-  const titles = [entry.tiktokTitle, entry.youtubeVideoTitle, entry.facebookVideoTitle, entry.pinterestTitle].filter(
-    nonEmpty,
-  );
+  const titles = [
+    entry.tiktokTitle,
+    entry.youtubeVideoTitle,
+    entry.facebookVideoTitle,
+    entry.pinterestTitle,
+    entry.googleBusinessEventTitle,
+  ].filter(nonEmpty);
   const media = stringArray(entry.mediaUrls).map(fileName);
   const text = nonEmpty(entry.text) ? entry.text : fallbackText;
   return [
