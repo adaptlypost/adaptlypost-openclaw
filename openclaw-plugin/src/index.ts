@@ -32,6 +32,7 @@ const Platform = Type.Union(
     Type.Literal("BLUESKY"),
     Type.Literal("TWITTER"),
     Type.Literal("MASTODON"),
+    Type.Literal("GOOGLE_BUSINESS"),
   ],
   { description: "AdaptlyPost platform identifier." },
 );
@@ -67,7 +68,7 @@ const AnalyticsRangeFields = {
   platforms: Type.Optional(
     Type.Array(Platform, {
       description:
-        "Restrict to these platforms; omit for every platform with analytics. TWITTER and MASTODON have none and are ignored; LINKEDIN returns no data until LinkedIn approves analytics access.",
+        "Restrict to these platforms; omit for every platform with analytics. TWITTER and MASTODON have none and are ignored; GOOGLE_BUSINESS has location-level impressions only, with no per-post metrics; LINKEDIN returns no data until LinkedIn approves analytics access.",
     }),
   ),
 };
@@ -81,6 +82,12 @@ const ConnectionIdFields = {
   threadsConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Threads connection ids." })),
   blueskyConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Bluesky connection ids." })),
   mastodonConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Mastodon connection ids." })),
+  googleBusinessConnectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Google Business Profile connection ids; each id is one business location. Text or one JPEG/PNG image (max 5 MB), no video or carousels, text max 1500 characters. Google removes posts with a phone number or email in the text (use the CALL button) and reviews every post, so one can come back rejected.",
+    }),
+  ),
   pinterestConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Pinterest connection ids." })),
   pageIds: Type.Optional(
     Type.Array(Type.String(), {
@@ -171,13 +178,62 @@ const PlatformConfigFields = {
       }),
     ),
   ),
+  googleBusinessConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String(),
+        topicType: Type.Union([Type.Literal("STANDARD"), Type.Literal("EVENT"), Type.Literal("OFFER")], {
+          description: "STANDARD is an update. EVENT and OFFER need eventTitle, eventStart and eventEnd.",
+        }),
+        callToActionType: Type.Optional(
+          Type.Union(
+            [
+              Type.Literal("BOOK"),
+              Type.Literal("ORDER"),
+              Type.Literal("SHOP"),
+              Type.Literal("LEARN_MORE"),
+              Type.Literal("SIGN_UP"),
+              Type.Literal("CALL"),
+            ],
+            {
+              description:
+                "Button on the post. Every type except CALL needs callToActionUrl; CALL dials the phone number on the business profile and ignores callToActionUrl.",
+            },
+          ),
+        ),
+        callToActionUrl: Type.Optional(Type.String({ format: "uri" })),
+        eventTitle: Type.Optional(Type.String({ description: "Required for EVENT and OFFER." })),
+        eventStart: Type.Optional(
+          Type.String({
+            pattern: "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2})?$",
+            description:
+              "Required for EVENT and OFFER. The business's local time as YYYY-MM-DD or YYYY-MM-DDTHH:mm, no timezone.",
+          }),
+        ),
+        eventEnd: Type.Optional(
+          Type.String({
+            pattern: "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2})?$",
+            description:
+              "Required for EVENT and OFFER. The business's local time as YYYY-MM-DD or YYYY-MM-DDTHH:mm, no timezone.",
+          }),
+        ),
+        offerCouponCode: Type.Optional(Type.String({ description: "OFFER only." })),
+        offerRedeemUrl: Type.Optional(Type.String({ format: "uri", description: "OFFER only." })),
+        offerTerms: Type.Optional(Type.String({ description: "OFFER only." })),
+      }),
+      {
+        description:
+          "Google Business Profile per-location config, one per connection. A location without one gets a STANDARD update with no button.",
+      },
+    ),
+  ),
 };
 
 export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky and Mastodon, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -218,7 +274,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all eleven platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -291,7 +347,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId; Google Business Profile takes googleBusinessConfigs with topicType. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -325,7 +381,7 @@ export default definePluginEntry({
         mediaAltTexts: Type.Optional(
           Type.Array(Type.String({ maxLength: 1000 }), {
             description:
-              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
+              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube, Google Business Profile and videos ignore it.',
           }),
         ),
         mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {

@@ -70,7 +70,7 @@ List all connected social media accounts for the account group tied to this API 
 }
 ```
 
-Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`
+Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`
 
 **Notes:**
 
@@ -79,6 +79,7 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
 - Mastodon `username` is the full handle with the server (e.g., `user@mastodon.social`)
+- Google Business Profile accounts are business locations: `displayName` is the location's name and `username` is empty. Each location is its own connection id
 - `status` is `active` or `unauthorized`. An unauthorized account stays listed but the platform rejected its token (a locked Facebook profile, a security checkpoint, a page the user lost access to). `POST /social-posts` refuses it with a 400 until the user reconnects it in the dashboard, so skip it when scheduling and tell the user to reconnect. `unauthorizedReason` is the platform's own message. Registered webhooks receive `account.unauthorized` the moment this happens
 
 ### POST /social-accounts/:id/check
@@ -132,7 +133,7 @@ Create or schedule a post to one or more social media platforms.
 
 **Required fields:**
 
-- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
+- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`
 - `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages)
 - `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
@@ -141,7 +142,7 @@ Create or schedule a post to one or more social media platforms.
 - `text` (string): Default post text for all platforms
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`
 - `mediaUrls` (string[]): Public URLs of uploaded media files
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
@@ -152,6 +153,7 @@ Create or schedule a post to one or more social media platforms.
 - `twitterConnectionIds` (string[]): X/Twitter account connection IDs
 - `blueskyConnectionIds` (string[]): Bluesky account connection IDs
 - `mastodonConnectionIds` (string[]): Mastodon account connection IDs
+- `googleBusinessConnectionIds` (string[]): Google Business Profile connection IDs, one per business location
 - `linkedinConnectionIds` (string[]): LinkedIn account connection IDs
 - `pinterestConnectionIds` (string[]): Pinterest account connection IDs
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
@@ -161,6 +163,7 @@ Create or schedule a post to one or more social media platforms.
 - `facebookConfigs` (array): Facebook-specific settings per page
 - `youtubeConfigs` (array): YouTube-specific settings per connection
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts)
+- `googleBusinessConfigs` (array): Google Business Profile settings per location (post type, button, event and offer details)
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
@@ -243,7 +246,7 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
 **Post status values:** `DRAFT`, `SCHEDULED`, `PENDING`, `PUBLISHING`, `COMPLETED`, `PARTIAL_FAILURE`, `FAILED`
 **Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
-The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
+The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon and Google Business Profile). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
 
 ### GET /social-posts/:id
 
@@ -302,8 +305,8 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 
 **Optional fields (batch-level):**
 
-- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `pageIds`
-- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`
+- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `googleBusinessConnectionIds`, `threadsConnectionIds`, `pageIds`
+- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`
 
 See [platform-configs.md](platform-configs.md) for config schemas.
 
@@ -314,10 +317,10 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
 - `mediaUrls` (string[]): Media file URLs
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
-- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs` — when set on a post item, these override the batch-level configs for that specific post
+- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 **Response:**
 
@@ -571,7 +574,7 @@ AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per atte
 
 ## Analytics
 
-Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`. `TWITTER` and `MASTODON` are ignored by every filter (X bills per post read, and Mastodon has no analytics yet), and `LINKEDIN` returns no data until LinkedIn approves the analytics products. Data reaches back 180 days at most, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far.
+Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`. `TWITTER` and `MASTODON` are ignored by every filter (X bills per post read, and Mastodon has no analytics yet), `GOOGLE_BUSINESS` reports location-level impressions only with no per-post metrics, and `LINKEDIN` returns no data until LinkedIn approves the analytics products. Data reaches back 180 days at most, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far.
 
 Every window endpoint takes:
 
@@ -744,7 +747,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 ## Enums
 
 **PlatformType:**
-`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
+`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`
 
 **ContentType:**
 `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, `DOCUMENT`

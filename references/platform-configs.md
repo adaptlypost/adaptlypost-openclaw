@@ -204,6 +204,51 @@ Only used for `DOCUMENT` posts: one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB
 
 LinkedIn text, image and video posts need no config object.
 
+## Google Business Profile — `googleBusinessConfigs`
+
+Put the connection ids in `googleBusinessConnectionIds`; each id is one business location. Add one config per connection. A location without a config gets a `STANDARD` update with no button.
+
+```json
+{
+  "googleBusinessConnectionIds": ["gbp-connection-id"],
+  "googleBusinessConfigs": [
+    {
+      "connectionId": "gbp-connection-id",
+      "topicType": "OFFER",
+      "eventTitle": "Autumn sale",
+      "eventStart": "2026-10-01",
+      "eventEnd": "2026-10-14",
+      "offerCouponCode": "AUTUMN10",
+      "offerRedeemUrl": "https://example.com/sale",
+      "offerTerms": "One per customer",
+      "callToActionType": "SHOP",
+      "callToActionUrl": "https://example.com/sale"
+    }
+  ]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | Google Business Profile connection ID (one location) |
+| `topicType` | string | **yes** | `STANDARD` (an update), `EVENT` or `OFFER` |
+| `callToActionType` | string | no | `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP` or `CALL`. `CALL` dials the phone number on the business profile and ignores `callToActionUrl` |
+| `callToActionUrl` | string | for every button except `CALL` | Button link (must be valid URL) |
+| `eventTitle` | string | for `EVENT` and `OFFER` | Event or offer title |
+| `eventStart` | string | for `EVENT` and `OFFER` | Business's local time, `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, no timezone |
+| `eventEnd` | string | for `EVENT` and `OFFER` | Business's local time, `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, no timezone |
+| `offerCouponCode` | string | no | Coupon code, `OFFER` only |
+| `offerRedeemUrl` | string | no | Where to redeem the offer (must be valid URL), `OFFER` only |
+| `offerTerms` | string | no | Offer terms and conditions, `OFFER` only |
+
+**Content notes:**
+
+- Text or a single JPEG/PNG image (max 5 MB). No video, no carousels, no alt text
+- Character limit: 1500
+- Google removes posts that put a phone number or email in the text; use the `CALL` button instead
+- Google reviews every post, so one can come back rejected after publishing
+- No `postUrl` on the post; analytics are location-level impressions only, with no per-post metrics
+
 ## Platforms Without Config Objects
 
 These platforms use only connection ID arrays — no additional config:
