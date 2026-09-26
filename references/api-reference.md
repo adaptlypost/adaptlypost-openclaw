@@ -12,9 +12,11 @@ Every key carries the workspace role chosen when it was created. Its permissions
 | Role | Permissions |
 | --- | --- |
 | `admin` | every permission below |
-| `editor` | `workspace.read`, `posts.read`, `posts.draft`, `posts.others`, `posts.schedule`, `posts.publish`, `posts.delete`, `media.upload`, `accounts.read`, `analytics.read`, `analytics.sync`, `ai.generate`, `members.read`, `tokens.own`, `webhooks.read`, `webhooks.manage`, `signature.manage` |
+| `editor` | `workspace.read`, `posts.read`, `posts.draft`, `posts.others`, `posts.schedule`, `posts.publish`, `posts.delete`, `media.upload`, `accounts.read`, `analytics.read`, `analytics.sync`, `ai.generate`, `members.read`, `tokens.own`, `webhooks.read`, `webhooks.manage`, `signature.manage`, `flowsery.write`, `redreplier.write`, `claw.use` |
 | `contributor` | `workspace.read`, `posts.read`, `posts.draft`, `media.upload`, `accounts.read`, `analytics.read`, `ai.generate`, `members.read`, `tokens.own` |
 | `viewer` | `workspace.read`, `posts.read`, `accounts.read`, `analytics.read`, `members.read`, `webhooks.read` |
+
+`flowsery.write`, `redreplier.write` and `claw.use` belong to the other products on the same workspace. No AdaptlyPost endpoint checks them, but `GET /me` lists them among the key's permissions.
 
 Which permission each endpoint needs:
 
