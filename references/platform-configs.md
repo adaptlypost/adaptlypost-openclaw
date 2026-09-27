@@ -67,12 +67,15 @@ For bulk scheduling, configs can be set at two levels:
 | --- | --- | --- | --- |
 | `connectionId` | string | **yes** | Instagram account connection ID |
 | `postType` | string | no | `FEED`, `REEL`, or `STORY`. Default: `FEED` |
+| `trialGraduation` | string | no | Publish the reel as a trial reel. `MANUAL`: you share it to followers from the Instagram app. `SS_PERFORMANCE`: Instagram shares it if it performs well |
 
 **Content types:**
 
 - **FEED**: Feed posts. Single image, carousel (up to 10), or video
 - **REEL**: Short-form video, 3-90 seconds, 9:16 recommended. Gets 2-3x reach vs feed
 - **STORY**: 24-hour temporary content. Image or video
+
+**Trial reels:** Instagram shows a trial reel to non-followers first and keeps it off your followers' feeds and your profile grid until it is shared. Only a single video posted as `REEL` or `FEED` can be a trial; a story, image or carousel with `trialGraduation` is rejected with a 400. The account must be a professional account that Instagram has enabled for trial reels, otherwise the Instagram platform fails with a message saying so.
 
 **Media notes:**
 

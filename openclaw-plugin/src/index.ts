@@ -181,6 +181,9 @@ const PlatformConfigFields = {
         postType: Type.Optional(
           Type.Union([Type.Literal("FEED"), Type.Literal("REEL"), Type.Literal("STORY")]),
         ),
+        trialGraduation: Type.Optional(
+          Type.Union([Type.Literal("MANUAL"), Type.Literal("SS_PERFORMANCE")]),
+        ),
       }),
     ),
   ),

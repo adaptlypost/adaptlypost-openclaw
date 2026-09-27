@@ -272,7 +272,15 @@ function settingLines(params: Record<string, unknown>): string[] {
     );
   }
   for (const entry of configEntries(params, "instagramConfigs")) {
-    lines.push(`Instagram: ${String(entry.postType ?? "FEED")}`);
+    lines.push(
+      `Instagram: ${String(entry.postType ?? "FEED")}${
+        entry.trialGraduation === "MANUAL"
+          ? ", trial reel you share to followers yourself"
+          : entry.trialGraduation === "SS_PERFORMANCE"
+            ? ", trial reel Instagram shares if it performs well"
+            : ""
+      }`,
+    );
   }
   for (const entry of configEntries(params, "facebookConfigs")) {
     lines.push(
