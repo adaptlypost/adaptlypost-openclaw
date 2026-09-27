@@ -101,7 +101,14 @@ type ErrorBody = {
   code?: unknown;
   requiredPermission?: unknown;
   role?: unknown;
+  keyRole?: unknown;
+  issuerRole?: unknown;
+  tokenType?: unknown;
 };
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
 
 function errorBody(parsed: unknown): ErrorBody {
   return typeof parsed === "object" && parsed !== null ? (parsed as ErrorBody) : {};
@@ -114,24 +121,57 @@ function errorMessage(parsed: unknown): string {
   return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
 }
 
+type DeniedRoles = {
+  role?: string;
+  keyRole?: string;
+  issuerRole?: string;
+  tokenType?: string;
+};
+
 export class AdaptlyPostApiError extends Error {
   readonly status: number;
   readonly code?: string;
   readonly requiredPermission?: string;
   readonly role?: string;
+  readonly keyRole?: string;
+  readonly issuerRole?: string;
 
   constructor(status: number, parsed: unknown) {
     const body = errorBody(parsed);
-    const code = typeof body.code === "string" ? body.code : undefined;
-    const requiredPermission = typeof body.requiredPermission === "string" ? body.requiredPermission : undefined;
-    const role = typeof body.role === "string" ? body.role : undefined;
-    super(describeApiError(status, code, errorMessage(parsed), requiredPermission, role));
+    const code = optionalString(body.code);
+    const requiredPermission = optionalString(body.requiredPermission);
+    const roles: DeniedRoles = {
+      role: optionalString(body.role),
+      keyRole: optionalString(body.keyRole),
+      issuerRole: optionalString(body.issuerRole),
+      tokenType: optionalString(body.tokenType),
+    };
+    super(describeApiError(status, code, errorMessage(parsed), requiredPermission, roles));
     this.name = "AdaptlyPostApiError";
     this.status = status;
     this.code = code;
     this.requiredPermission = requiredPermission;
-    this.role = role;
+    this.role = roles.role;
+    this.keyRole = roles.keyRole;
+    this.issuerRole = roles.issuerRole;
   }
+}
+
+export function roleLabel(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function narrowingIssuerRole({ role, keyRole, issuerRole }: DeniedRoles): string | undefined {
+  return keyRole && issuerRole && keyRole !== issuerRole && role === issuerRole ? issuerRole : undefined;
+}
+
+function deniedRoleSentence(roles: DeniedRoles): string {
+  const issuerRole = narrowingIssuerRole(roles);
+  if (issuerRole && roles.keyRole) {
+    return `This key carries the ${roleLabel(roles.keyRole)} role, but the member who created it is now a ${roleLabel(issuerRole)}, so the key holds only that member's permissions.`;
+  }
+  if (roles.tokenType === "api_token" && roles.keyRole) return `This key has the ${roleLabel(roles.keyRole)} role.`;
+  return "";
 }
 
 function describeApiError(
@@ -139,15 +179,17 @@ function describeApiError(
   code: string | undefined,
   message: string,
   requiredPermission: string | undefined,
-  role: string | undefined,
+  roles: DeniedRoles,
 ): string {
   switch (code) {
     case "permission_denied":
       return [
         `AdaptlyPost refused this call (403 permission_denied): ${message}`,
         requiredPermission ? `Required permission: ${requiredPermission}.` : "",
-        role ? `This key has the ${role} role.` : "",
-        "Stop here: a retry or another key of the same role gets the same answer. For a post, save it with mode DRAFT so a workspace member can publish it; otherwise tell the user which permission the key lacks so they can create a key with a role that holds it.",
+        deniedRoleSentence(roles),
+        narrowingIssuerRole(roles)
+          ? "Stop here: a retry gets the same answer, and so does any key this member creates until a workspace admin restores their role. For a post, save it with mode DRAFT so a workspace member can publish it; otherwise tell the user that the key's creator lost the permission."
+          : "Stop here: a retry or another key of the same role gets the same answer. For a post, save it with mode DRAFT so a workspace member can publish it; otherwise tell the user which permission the key lacks so they can create a key with a role that holds it.",
       ]
         .filter(Boolean)
         .join(" ");

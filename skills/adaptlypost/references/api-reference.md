@@ -7,7 +7,7 @@ The same header also accepts a WorkOS OAuth access token, which is how the hoste
 
 ## Roles and permissions
 
-Every key carries the workspace role chosen when it was created. Its permissions are that role's set intersected with the current permissions of the member who created it, so a key never does more than its creator: demoting the creator shrinks the key on the next request, and removing the creator from the workspace revokes it. An OAuth token acts with the member's own role in their default workspace.
+Every key carries the workspace role chosen when it was created. Its permissions are that role's set intersected with the current permissions of the member who created it, so a key never does more than its creator: demoting the creator shrinks the key on the next request, and removing the creator from the workspace revokes it. An OAuth token reaches every workspace its member belongs to: `GET /workspaces` lists them, the `X-Workspace-Id` header picks one per request, and each workspace applies the member's own role there. An API key belongs to one workspace, so a skill using an `adaptly_` key never sends that header.
 
 | Role | Permissions |
 | --- | --- |
@@ -21,8 +21,8 @@ Which permission each endpoint needs:
 | Endpoint | Permission | Roles |
 | --- | --- | --- |
 | `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results`, `GET /recurring-posts`, `GET /recurring-posts/:id` | `posts.read` | all |
-| `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` | `posts.draft` | admin, editor, contributor |
-| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `PATCH /social-posts/:id` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
+| `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` on a dated `DRAFT` | `posts.draft` | admin, editor, contributor |
+| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `PATCH /social-posts/:id` and `POST /social-posts/:id/unschedule` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
 | `POST /social-posts` and `POST /social-posts/:id/publish` without `scheduledAt` or with a past one; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
 | `DELETE /social-posts/:id` on a post that is not a `DRAFT`; `DELETE /recurring-posts/:id` | `posts.delete` | admin, editor |
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
@@ -75,7 +75,7 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 **Notes:**
 
 - Facebook accounts represent pages, not personal profiles
-- For Facebook, the `id` field is what you pass in `pageIds` when creating posts. The extra `pageId` field is the page's public ID on facebook.com — informational only (shown since pages have no `username`), do NOT pass it as an identifier
+- For Facebook, pass the `id` field in `pageIds` when creating posts. The extra `pageId` field is the page's public ID on facebook.com (shown since pages have no `username`); `pageIds` and `POST /social-accounts/:id/check` accept it as well
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
 - Mastodon `username` is the full handle with the server (e.g., `user@mastodon.social`)
@@ -146,7 +146,7 @@ Create or schedule a post to one or more social media platforms.
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
 - `recurrence` (object): Repeats the post. See [Recurrence](#recurrence) below
-- `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (not the `pageId` field)
+- `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (the account's `pageId` value is accepted too)
 - `tiktokConnectionIds` (string[]): TikTok account connection IDs
 - `threadsConnectionIds` (string[]): Threads account connection IDs
 - `instagramConnectionIds` (string[]): Instagram account connection IDs
@@ -471,7 +471,7 @@ Any other status returns `400` `Cannot edit post in current state`. An id outsid
 
 ### DELETE /social-posts/:id
 
-Delete a post record. Use it to cancel a `DRAFT` or `SCHEDULED` post; a deleted scheduled post will not publish. The API does not refuse other statuses, but deleting a `COMPLETED` or `PARTIAL_FAILURE` post only drops AdaptlyPost's record: the content already exists on each network, and removing it there is a manual step. Prefer `PATCH` over delete-and-recreate. Irreversible.
+Delete a post record. Use it to cancel a `DRAFT` or `SCHEDULED` post; a deleted scheduled post will not publish. A post that is `PUBLISHING` right now is refused with `409` `Post is being published and cannot be deleted`; wait for it to finish. Other statuses are accepted, but deleting a `COMPLETED` or `PARTIAL_FAILURE` post only drops AdaptlyPost's record: the content already exists on each network, and removing it there is a manual step. Prefer `PATCH` over delete-and-recreate. Irreversible.
 
 **Response:** `{ "deleted": true }`
 
@@ -639,7 +639,11 @@ Rather than polling `GET /social-posts` to find out whether something published,
 | `post.published` | Every targeted platform published |
 | `post.partially_failed` | Some platforms published and some failed |
 | `post.failed` | Every platform failed |
-| `account.unauthorized` | Facebook rejected an account's token; `data.account` carries the account `id`, `pageId`, `status: "unauthorized"` and the platform's `reason`. The account stays on `/social-accounts` with `status: "unauthorized"` until reconnected |
+| `account.unauthorized` | A platform rejected a connected account's token; `data.account` carries the account `id`, `platform`, `displayName`, `pageId` (Facebook), `status: "unauthorized"` and the platform's `reason`. The account stays on `/social-accounts` with `status: "unauthorized"` until reconnected |
+| `image.completed` | An AI image job finished; `data.image` carries `jobId`, `sessionId`, `prompt`, `imageUrl` and `imageId` |
+| `image.failed` | An AI image job failed; `data.image` carries `jobId`, `sessionId`, `prompt` and `error` |
+
+Every webhook receives every event: there is no per-event subscription. Post events carry `data.post`, account events `data.account`, image events `data.image`.
 
 ### POST /api/v1/webhooks
 
@@ -949,12 +953,14 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
   "code": "permission_denied",
   "requiredPermission": "posts.publish",
   "role": "contributor",
+  "keyRole": "contributor",
+  "issuerRole": "editor",
   "tokenType": "api_token",
   "message": "The Contributor role cannot publish posts. Send the post with saveAsDraft: true and ask a workspace member to publish it."
 }
 ```
 
-`requiredPermission` is the permission the operation needs (see [Roles and permissions](#roles-and-permissions)), `role` is the calling key's role key and `tokenType` is `api_token` or `oauth`. `message` says what the role cannot do and what to do instead, in the request's language. Stop on this error: a retry or another key of the same role gets the same answer.
+`requiredPermission` is the permission the operation needs (see [Roles and permissions](#roles-and-permissions)), `role` is the role actually in force, which is the issuer's role when the member who created the key has since been demoted below the key's role; `keyRole` is the role recorded on the key, `issuerRole` the creator's current role, and `tokenType` is `api_token` or `oauth`. `message` says what the role cannot do and what to do instead, in the request's language. Stop on this error: a retry or another key of the same role gets the same answer.
 
 **Key revoked because its creator left (401):**
 

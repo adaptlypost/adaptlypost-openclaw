@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.11.0
+version: 1.12.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -68,12 +68,14 @@ A call the role does not cover answers `403` with this body:
   "code": "permission_denied",
   "requiredPermission": "posts.publish",
   "role": "contributor",
+  "keyRole": "contributor",
+  "issuerRole": "editor",
   "tokenType": "api_token",
   "message": "The Contributor role cannot publish posts. Send the post with saveAsDraft: true and ask a workspace member to publish it."
 }
 ```
 
-On `permission_denied`: stop. Do not retry, do not look for another key, do not work around it with a different endpoint. Show the user `message` and `requiredPermission`; for a post, save it as a draft instead. A `403` with `code: subscription_required` means the workspace plan is not active, which the user fixes in the app. A `401` with `code: token_issuer_lost_access` means the member who created the key lost access to the workspace and the key is revoked: ask the user for a new key.
+On `permission_denied`: stop. Do not retry, do not look for another key, do not work around it with a different endpoint. Show the user `message` and `requiredPermission`; for a post, save it as a draft instead. `keyRole` is the role the key was created with and `issuerRole` the current role of the member who created it. When `role` equals `issuerRole` and differs from `keyRole`, that member was demoted and the key holds only their permissions: say so, because a new key from the same member gets the same answer until a workspace admin restores their role. A `403` with `code: subscription_required` means the workspace plan is not active, which the user fixes in the app. A `401` with `code: token_issuer_lost_access` means the member who created the key lost access to the workspace and the key is revoked: ask the user for a new key.
 
 ## Safety rules — read before any write call
 
@@ -90,7 +92,7 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
 4. **Verify media before upload.** Files uploaded via `/upload-urls` are stored at a **public URL** that exists from the moment of upload — before the post goes live, and even if the post is never created. Before calling `/upload-urls`:
    - Confirm the exact file path with the user.
    - Refuse to upload files from directories that may contain unrelated content (`~/Downloads`, `~/Desktop`, screenshot folders, etc.) without an explicit per-file "yes".
-   - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4` or `.mov` image or video. Key files, `.env` files, config and documents are never media.
+   - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4` or `.mov` image or video, or a `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` file the user named for a LinkedIn `DOCUMENT` post. Key files, `.env` files and config are never media.
    - Only download media from public `https://` URLs. Refuse `localhost`, private or link-local addresses (`10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, `::1`, `fc00::/7`) and cloud metadata hosts.
 5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop.
 6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing. A recurring post cannot be a draft, so an unattended run never creates one unless the user pre-authorized that exact series.
@@ -134,7 +136,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 Returns `{ "postId", "queuedPlatforms", "skippedPlatforms", "isScheduled", "scheduledAt" }`. That response confirms queueing, not delivery: publishing runs asynchronously per platform, so read `GET /social-posts/:id/results` (step 10) for the outcome. A `scheduledAt` in the past is treated the same as omitting it.
 
-**Important**: You must include the correct `*ConnectionIds` array for each platform in `platforms`. For example, if posting to Instagram and Twitter, include both `instagramConnectionIds` and `twitterConnectionIds`. There is no `facebookConnectionIds` — Facebook posts target a *page*, so it uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts` (NOT its `pageId` field):
+**Important**: You must include the correct `*ConnectionIds` array for each platform in `platforms`. For example, if posting to Instagram and Twitter, include both `instagramConnectionIds` and `twitterConnectionIds`. There is no `facebookConnectionIds` — Facebook posts target a *page*, so it uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts` (its `pageId` value is accepted too):
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
@@ -332,7 +334,7 @@ curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T
 
 Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time it already has is fine, even once that time has passed. To publish it now, call `/publish` without `scheduledAt`.
 
-`POST /social-posts/:id/unschedule` takes no body and turns a `SCHEDULED` post, or a `DRAFT` that still has a date, back into an undated `DRAFT` with `scheduledAt: null`. Content, media and accounts stay as they are, and nothing publishes until the post is scheduled again. Use it when the user wants a post off the calendar without deleting it. Any other status returns `400` `Cannot edit post in current state`, and an id outside the workspace returns `404`.
+`POST /social-posts/:id/unschedule` takes no body and turns a `SCHEDULED` post, or a `DRAFT` that still has a date, back into an undated `DRAFT` with `scheduledAt: null`. Content, media and accounts stay as they are, and nothing publishes until the post is scheduled again. Use it when the user wants a post off the calendar without deleting it. Unscheduling a `SCHEDULED` post needs `posts.schedule` (admin, editor), a dated `DRAFT` needs `posts.draft`, and a post another member created also needs `posts.others`, so a Contributor key can only unschedule its own drafts. Any other status returns `400` `Cannot edit post in current state`, and an id outside the workspace returns `404`.
 
 `DELETE` removes the record from AdaptlyPost, and a deleted scheduled post will not publish. It never removes content already on a network: deleting a `COMPLETED` post only drops AdaptlyPost's record, and removing the live post is a manual step per platform. Prefer `PATCH` over delete-and-recreate.
 
@@ -411,7 +413,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
   -d '{"url": "https://example.com/hooks/adaptlypost"}'
 ```
 
-Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.failed` and `account.unauthorized` (a connected account's token stopped working; `data.account` names it).
+Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.failed`, `account.unauthorized` (a connected account's token stopped working; `data.account` names it), and `image.completed` / `image.failed` (an AI image job finished; `data.image` carries it). Every webhook receives every event, so ignore the ones you do not handle.
 
 The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 

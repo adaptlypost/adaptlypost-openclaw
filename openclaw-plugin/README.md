@@ -44,7 +44,9 @@ the prompt says so up front and approving saves the post as a draft instead, for
 you to publish in the AdaptlyPost app. A retry with such a token is refused
 before it reaches you. When AdaptlyPost itself answers `403 permission_denied`,
 the agent sees the server's message, the missing permission and the token's
-role, and is told to stop rather than retry.
+role, and is told to stop rather than retry. When the member who created the
+token has since been demoted below the token's role, both roles are named,
+because the token holds only that member's permissions.
 
 `mediaDirs` lists the folders the agent may upload local files from. Leave it
 out and only URL uploads work. Don't point it at your home folder; the plugin
@@ -63,8 +65,8 @@ before it runs:
 
 Unscheduling a post and pausing, resuming or deleting a recurring post also stop
 for approval. The prompt names the series, its schedule, its accounts and its
-text. A token whose role cannot change a scheduled series is refused before the
-prompt.
+text. A token whose role cannot change a scheduled series, or cannot unschedule
+a scheduled post (Contributor and Viewer), is refused before the prompt.
 
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
@@ -82,6 +84,9 @@ OpenClaw's plugin permission requests docs.
 
 ## What the plugin refuses
 
+- A scheduled or live post to an account whose status is `unauthorized` is
+  refused before the prompt, because AdaptlyPost would refuse it with 400. The
+  agent is told to have you reconnect the account or leave it out.
 - API calls go only to `https://post.adaptlypost.com/post/api/v1`. The base URL
   is fixed in code and redirects are not followed, so the token cannot be sent
   anywhere else.

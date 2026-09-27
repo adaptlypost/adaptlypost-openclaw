@@ -6,6 +6,7 @@ import {
   keyCapabilities,
   parseRemoteUrl,
   resolveLocalMedia,
+  roleLabel,
   type KeyCapabilities,
   type PluginConfig,
 } from "./api.js";
@@ -115,7 +116,26 @@ const CONNECTION_FIELDS: Record<string, string> = {
   MASTODON: "mastodonConnectionIds",
 };
 
-type Account = { id: string; platform: string; displayName?: string; username?: string; pageId?: string };
+type Account = {
+  id: string;
+  platform: string;
+  displayName?: string;
+  username?: string;
+  pageId?: string;
+  status?: string;
+};
+
+type AccountLabel = { name: string; unauthorized: boolean };
+
+const ROLE_RANK: Record<string, number> = { viewer: 0, contributor: 1, editor: 2, admin: 3 };
+
+function roleHolder(me: KeyCapabilities): string {
+  const issuer = me.issuerRole ?? "";
+  const narrowed = issuer in ROLE_RANK && me.role.key in ROLE_RANK && ROLE_RANK[issuer] < ROLE_RANK[me.role.key];
+  return narrowed
+    ? `This key has the ${me.role.name} role, but the member who created it is now a ${roleLabel(issuer)}, and that role`
+    : `This key has the ${me.role.name} role, which`;
+}
 
 function lookupFailed(what: string, error: unknown): Error {
   return new Error(
@@ -123,19 +143,22 @@ function lookupFailed(what: string, error: unknown): Error {
   );
 }
 
-async function fetchAccountNames(cfg: PluginConfig): Promise<Map<string, string>> {
+async function fetchAccountLabels(cfg: PluginConfig): Promise<Map<string, AccountLabel>> {
   const { accounts = [] } = (await callApi(cfg, "GET", "/social-accounts", {
     signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
   }).catch((error: unknown) => {
     throw lookupFailed("the connected accounts", error);
   })) as { accounts?: Account[] };
-  const names = new Map<string, string>();
+  const labels = new Map<string, AccountLabel>();
   for (const account of accounts) {
-    const name = account.username ? `@${account.username}` : (account.displayName ?? account.id);
-    names.set(account.id, name);
-    if (account.pageId) names.set(account.pageId, name);
+    const label = {
+      name: account.username ? `@${account.username}` : (account.displayName ?? account.id),
+      unauthorized: account.status === "unauthorized",
+    };
+    labels.set(account.id, label);
+    if (account.pageId) labels.set(account.pageId, label);
   }
-  return names;
+  return labels;
 }
 
 function stringArray(value: unknown): string[] {
@@ -345,29 +368,37 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
   if (params.mode === "DRAFT") return undefined;
 
   const platforms = stringArray(params.platforms);
-  const [names, me] = await Promise.all([
-    fetchAccountNames(cfg),
+  const [labels, me] = await Promise.all([
+    fetchAccountLabels(cfg),
     keyCapabilities(cfg, AbortSignal.timeout(LOOKUP_TIMEOUT_MS)),
   ]);
+  const disconnected: string[] = [];
   const targets = platforms.flatMap((platform) =>
     stringArray(params[CONNECTION_FIELDS[platform] ?? ""]).map((id) => {
-      const name = names.get(id);
-      if (!name) {
+      const label = labels.get(id);
+      if (!label) {
         throw new Error(
           `Account ${id} for ${PLATFORM_LABELS[platform] ?? platform} is not among the connected accounts, so the approval prompt cannot name it. Nothing was published. Take ids from adaptlypost_accounts.`,
         );
       }
-      return `${PLATFORM_LABELS[platform] ?? platform} ${name}`;
+      const target = `${PLATFORM_LABELS[platform] ?? platform} ${label.name}`;
+      if (label.unauthorized) disconnected.push(target);
+      return target;
     }),
   );
   if (!targets.length) throw new Error("No connection ids were given for the selected platforms. Nothing was published.");
+  if (disconnected.length) {
+    throw new Error(
+      `${disconnected.join(", ")} ${disconnected.length === 1 ? "is" : "are"} disconnected (status unauthorized), and AdaptlyPost refuses a post to a disconnected account with 400. Nothing was published. Ask the user to reconnect ${disconnected.length === 1 ? "it" : "them"} in the AdaptlyPost app, or leave ${disconnected.length === 1 ? "it" : "them"} out of the call.`,
+    );
+  }
 
   const publishNow = params.mode === "PUBLISH_NOW";
   const refused = refusedAction(me, publishNow);
   const recurrence = recurrenceOf(params);
   if (refused && recurrence && me) {
     throw new Error(
-      `This key has the ${me.role.name} role, which cannot schedule, and a recurring post cannot be saved as a draft, so nothing was created. Save a single post with mode DRAFT instead, or ask a workspace member with an Editor or Admin role to set up the repeat in the AdaptlyPost app.`,
+      `${roleHolder(me)} cannot schedule, and a recurring post cannot be saved as a draft, so nothing was created. Save a single post with mode DRAFT instead, or ask a workspace member with an Editor or Admin role to set up the repeat in the AdaptlyPost app.`,
     );
   }
   const accountCount = `${targets.length} account${targets.length === 1 ? "" : "s"}`;
@@ -381,7 +412,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
     : `${recurrence ? "First post" : "Scheduled for"} ${String(body.scheduledAt)}${nonEmpty(params.timezone) ? ` (${params.timezone})` : ""}.`;
   const lines = [
     refused && me
-      ? `AdaptlyPost will refuse to ${refused}: this key has the ${me.role.name} role. Approve to save the post below as a draft for a workspace member to ${refused}; deny to do nothing.`
+      ? `AdaptlyPost will refuse to ${refused}. ${roleHolder(me)} cannot ${refused}. Approve to save the post below as a draft for a workspace member to ${refused}; deny to do nothing.`
       : timing,
     ...(recurrence ? [describeRecurrence(withFirstWeekday(recurrence, String(body.scheduledAt), nonEmpty(params.timezone) ? params.timezone : "UTC"))] : []),
     `Accounts: ${targets.join(", ")}`,
@@ -467,7 +498,7 @@ async function describeRetry(cfg: PluginConfig, params: Record<string, unknown>)
   const me = await keyCapabilities(cfg, signal);
   if (me && !me.can.publish) {
     throw new Error(
-      `This key has the ${me.role.name} role, which cannot publish, so AdaptlyPost would refuse the retry with 403 permission_denied. Nothing was retried. Tell the user a workspace member with an Editor or Admin role has to retry it in the AdaptlyPost app, or give the agent a key with that role.`,
+      `${roleHolder(me)} cannot publish, so AdaptlyPost would refuse the retry with 403 permission_denied. Nothing was retried. Tell the user a workspace member with an Editor or Admin role has to retry it in the AdaptlyPost app, or give the agent a key with that role.`,
     );
   }
   const [post, results] = await Promise.all([
@@ -515,11 +546,19 @@ const UNSCHEDULE_TEXT_PREVIEW = 120;
 
 async function describeUnschedule(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
   const postId = String(params.post_id ?? "");
-  const post = (await callApi(cfg, "GET", `/social-posts/${encodeURIComponent(postId)}`, {
-    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw lookupFailed(`post ${postId}`, error);
-  })) as PostRecord & { scheduledAt?: string | null };
+  const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const [post, me] = await Promise.all([
+    callApi(cfg, "GET", `/social-posts/${encodeURIComponent(postId)}`, { signal }).catch((error: unknown) => {
+      throw lookupFailed(`post ${postId}`, error);
+    }) as Promise<PostRecord & { status?: string; scheduledAt?: string | null }>,
+    keyCapabilities(cfg, signal),
+  ]);
+  const isDraft = post.status === "DRAFT";
+  if (me && !(isDraft ? me.can.draft : me.can.schedule)) {
+    throw new Error(
+      `${roleHolder(me)} cannot ${isDraft ? "edit drafts" : "change scheduled posts"}, so AdaptlyPost would refuse to unschedule this ${isDraft ? "draft" : `${(post.status ?? "scheduled").toLowerCase()} post`} with 403 permission_denied. Nothing was changed. Tell the user a workspace member with an Editor or Admin role has to unschedule it in the AdaptlyPost app, or give the agent a key with that role.`,
+    );
+  }
 
   const platforms = post.platforms ?? [];
   const accounts = platforms.map(
@@ -613,7 +652,7 @@ async function describeSeriesChange(
   const me = await keyCapabilities(cfg, signal);
   if (me && !change.allowed(me)) {
     throw new Error(
-      `This key has the ${me.role.name} role, which cannot ${change.verb.toLowerCase()} recurring posts, so AdaptlyPost would refuse with 403 permission_denied. Nothing was changed. Tell the user a workspace member with an Editor or Admin role has to do it in the AdaptlyPost app, or give the agent a key with that role.`,
+      `${roleHolder(me)} cannot ${change.verb.toLowerCase()} recurring posts, so AdaptlyPost would refuse with 403 permission_denied. Nothing was changed. Tell the user a workspace member with an Editor or Admin role has to do it in the AdaptlyPost app, or give the agent a key with that role.`,
     );
   }
   const series = (await callApi(cfg, "GET", `/recurring-posts/${encodeURIComponent(recurringPostId)}`, {
