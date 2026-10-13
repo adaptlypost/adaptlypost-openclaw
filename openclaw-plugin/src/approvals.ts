@@ -345,6 +345,18 @@ function googleBusinessLine(entry: ConfigEntry): string {
   return `Google Business Profile: ${parts.join(", ")}`;
 }
 
+const DEFAULT_PINTEREST_BOARD = 'public "AdaptlyPost" board that is created if missing';
+
+function pinterestLines(params: Record<string, unknown>): string[] {
+  if (!stringArray(params.platforms).includes("PINTEREST")) return [];
+  const configs = configEntries(params, "pinterestConfigs");
+  return stringArray(params.pinterestConnectionIds).map((connectionId) => {
+    const entry = configs.find((config) => config.connectionId === connectionId) ?? {};
+    const board = nonEmpty(entry.boardId) ? `board ${entry.boardId}` : DEFAULT_PINTEREST_BOARD;
+    return `Pinterest: ${board}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`;
+  });
+}
+
 function settingLines(params: Record<string, unknown>): string[] {
   const lines: string[] = [];
   for (const entry of configEntries(params, "tiktokConfigs")) {
@@ -363,11 +375,7 @@ function settingLines(params: Record<string, unknown>): string[] {
   for (const entry of configEntries(params, "linkedinConfigs")) {
     if (nonEmpty(entry.documentTitle)) lines.push(`LinkedIn: document title "${entry.documentTitle}"`);
   }
-  for (const entry of configEntries(params, "pinterestConfigs")) {
-    lines.push(
-      `Pinterest: board ${String(entry.boardId)}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`,
-    );
-  }
+  lines.push(...pinterestLines(params));
   if (params.twitterKeepLinks === true && stringArray(params.platforms).includes("TWITTER")) {
     lines.push("X: links stay clickable, costing 20 credits instead of 2");
   }
@@ -545,7 +553,11 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.instagramPostType,
     entry.facebookPostType,
     entry.googleBusinessTopicType,
-    nonEmpty(entry.pinterestBoardId) ? `board ${entry.pinterestBoardId}` : undefined,
+    nonEmpty(entry.pinterestBoardId)
+      ? `board ${entry.pinterestBoardId}`
+      : entry.platform === "PINTEREST"
+        ? DEFAULT_PINTEREST_BOARD
+        : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`

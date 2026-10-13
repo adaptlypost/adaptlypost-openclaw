@@ -112,6 +112,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_accounts` | List connected accounts and their connection ids, with `status` (`active` or `unauthorized`). Call this first. |
 | `adaptlypost_check_account` | Ask Facebook right now whether a page's token still works and return its fresh status. Use after the user reconnects a page. |
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
+| `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
@@ -126,7 +127,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Sixteen tools, fewer than the MCP server exposes. Post editing, deletion,
+Seventeen tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the
@@ -138,8 +139,12 @@ Connection ids are per platform and go in the matching array, so a LinkedIn id
 belongs in `linkedinConnectionIds`. Facebook is the exception: pages have no
 username, so they carry a `pageId` and go in `pageIds`.
 
-TikTok needs `privacyLevel` in `tiktokConfigs` and has no default. Pinterest
-needs `boardId`. Both reject the post outright without them.
+TikTok needs `privacyLevel` in `tiktokConfigs` and has no default; the post is
+rejected outright without it. For Pinterest, find a board with
+`adaptlypost_list_pinterest_boards` and pass its `id` as `boardId` in
+`pinterestConfigs`. A board belongs to one Pinterest account. Without a
+`boardId` the pin goes to a public board named "AdaptlyPost", created on the
+account the first time it is needed, and the approval prompt says so.
 
 Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500

@@ -28,7 +28,7 @@ Which permission each endpoint needs:
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
-| `GET /social-accounts/:id/instagram-audio` | `posts.draft` | admin, editor, contributor |
+| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
@@ -138,6 +138,30 @@ Search Instagram music and original sounds to add to a Reel. `:id` is the Instag
 
 Returns `400` when the account is not connected through Facebook or Instagram rejects the search, and `404` for an unknown account.
 
+### GET /social-accounts/:id/pinterest-boards
+
+List the boards a Pinterest account can pin to, secret boards included. `:id` is the Pinterest account `id` from `/social-accounts`.
+
+**Response:**
+
+```json
+{
+  "boards": [
+    {
+      "id": "549755885175",
+      "name": "Recipes",
+      "description": "Weeknight dinners",
+      "privacy": "PUBLIC",
+      "pinCount": 42
+    }
+  ]
+}
+```
+
+`id` and `name` are always set; `description`, `privacy` and `pinCount` are optional. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. Pass the chosen `id` as `pinterestConfigs[].boardId` (see [platform-configs.md](platform-configs.md#pinterest--pinterestconfigs)).
+
+Returns `404` when the account is not found or is not a Pinterest account in this workspace, and `400` when Pinterest refuses the request, usually because the account must be reconnected.
+
 ### POST /social-posts
 
 Create or schedule a post to one or more social media platforms.
@@ -201,7 +225,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 - `pinterestConnectionIds` (string[]): Pinterest account connection IDs
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
 - `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
-- `pinterestConfigs` (array): Pinterest-specific settings per connection
+- `pinterestConfigs` (array): Pinterest-specific settings per connection. `boardId` is optional; without it the pin goes to a public board named "AdaptlyPost"
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page

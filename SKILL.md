@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.13.0
+version: 1.14.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -87,7 +87,7 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
    - **Content** — exact text (and per-platform overrides), media filenames, first comments, Instagram collaborators and audio, Google Business Profile event, offer and button
    - **Platforms** — which networks and which connected accounts (by `displayName`/`username`, not just ID)
    - **Timing** — "now", a specific scheduled time, or draft. For a recurring post, also how often it repeats and when it stops
-   - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType` and `shareToStory`, Facebook `shareToStory`, X `twitterKeepLinks`, etc.
+   - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType` and `shareToStory`, Facebook `shareToStory`, X `twitterKeepLinks`, the Pinterest board, etc.
      A previous "yes" does not authorize a new post. Re-confirm each one.
 2. **Prefer drafts when uncertain.** If the user has not run this skill before, or the content is sensitive, default to `saveAsDraft: true` and let them review in the AdaptlyPost UI before publishing.
 3. **Never batch without explicit batch consent.** If the user asks to schedule many posts in a row, ask them to confirm a **small first batch** (e.g. 1–3 posts) before scheduling the rest. A single typo or wrong connection ID will otherwise propagate to every queued post.
@@ -455,7 +455,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
-| **Pinterest** | `pinterestConfigs` | `boardId` (required), `title`, `link` |
+| **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`; without it the pin goes to a public "AdaptlyPost" board), `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
 | **X (Twitter)** | — | No config object, uses `twitterConnectionIds`; top-level `twitterKeepLinks` keeps links clickable |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds` only |
@@ -536,6 +536,23 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
 
 Volumes are 1 to 100 and default to 100. `title` and `artist` are stored for display only, so copy them from the search result.
 
+### Pinterest boards
+
+A pin goes to one board. List the boards of the Pinterest account you post to, ask the user which one to use unless they already named it, and pass its `id` as `boardId`:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/social-accounts/PINTEREST_ID/pinterest-boards"
+```
+
+Returns `{ "boards": [{ "id", "name", "description", "privacy", "pinCount" }] }` with every board the account can pin to, secret boards included. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. An id that is not a Pinterest account in this workspace gets `404`. A `400` means Pinterest refused the request, usually because the user must reconnect the account. Then pass the pick in the Pinterest config:
+
+```json
+"pinterestConfigs": [{ "connectionId": "PINTEREST_ID", "boardId": "BOARD_ID", "title": "Pin title", "link": "https://example.com/page" }]
+```
+
+Without `boardId` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed. Leave it out only when the user is happy with that board.
+
 ### Per-platform extras
 
 All optional, and each takes at most one entry per platform. A platform the field does not support returns `400`.
@@ -613,7 +630,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - `TELEGRAM` shows up on posts made in the app, but the API cannot post to Telegram. Never put it in `platforms`.
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
-- Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
+- For a Pinterest post, list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Leave `boardId` out only when the user is happy with the default "AdaptlyPost" board.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - A recurring post repeats the same text, which X and LinkedIn reject as a duplicate. Put spintax such as `{Hi|Hello}` in the text so each post differs.
