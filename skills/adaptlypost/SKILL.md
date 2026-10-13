@@ -1,8 +1,8 @@
 ---
 name: adaptlypost
-description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest and YouTube accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
+description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.12.0
+version: 1.13.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -17,7 +17,7 @@ metadata:
 
 # AdaptlyPost
 
-Schedule social media posts across 10 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
+Schedule social media posts across 11 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
 
 ## What this skill touches
 
@@ -57,6 +57,8 @@ A key carries the workspace role chosen when it was created, and never does more
 | `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, create or change recurring posts, delete anything but its own drafts, touch other members' posts, manage webhooks |
 | `viewer` | Read posts, accounts, analytics, webhooks | Any write |
 
+`POST /social-posts` and `POST /social-posts/:id/publish` check the role per call. A draft needs `posts.draft`. A future `scheduledAt` also needs `posts.schedule`, and publishing now also needs `posts.publish`. `GET /me` returns the key's `role` and `can: { draft, schedule, publish }`, so check it before asking the user for a time.
+
 Once a write answers `403` with `requiredPermission` `posts.schedule` or `posts.publish`, every later post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
 
 A call the role does not cover answers `403` with this body:
@@ -82,10 +84,10 @@ On `permission_denied`: stop. Do not retry, do not look for another key, do not 
 Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry`, `POST /recurring-posts/:id/resume` and `POST /upload-urls` as a high-impact action.
 
 1. **Confirm before every post.** Before calling `POST /social-posts`, show the user a summary and get an explicit "yes" covering all four items:
-   - **Content** — exact text (and per-platform overrides), media filenames
+   - **Content** — exact text (and per-platform overrides), media filenames, first comments, Instagram collaborators and audio, Google Business Profile event, offer and button
    - **Platforms** — which networks and which connected accounts (by `displayName`/`username`, not just ID)
    - **Timing** — "now", a specific scheduled time, or draft. For a recurring post, also how often it repeats and when it stops
-   - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType`, etc.
+   - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType` and `shareToStory`, Facebook `shareToStory`, X `twitterKeepLinks`, etc.
      A previous "yes" does not authorize a new post. Re-confirm each one.
 2. **Prefer drafts when uncertain.** If the user has not run this skill before, or the content is sensitive, default to `saveAsDraft: true` and let them review in the AdaptlyPost UI before publishing.
 3. **Never batch without explicit batch consent.** If the user asks to schedule many posts in a row, ask them to confirm a **small first batch** (e.g. 1–3 posts) before scheduling the rest. A single typo or wrong connection ID will otherwise propagate to every queued post.
@@ -110,6 +112,8 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
 ```
 
 Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl", "status" }] }`. Save the `id` — you'll use it as a connection ID when creating posts.
+
+A Google Business Profile account (`platform: GOOGLE_BUSINESS`) is one business location: `displayName` is the location title and `username` is empty. Instagram accounts carry `supportsInstagramAudio`, true when the account was connected through Facebook, which Instagram audio on Reels needs. Telegram chats are not listed: Telegram posts can only be created in the AdaptlyPost app.
 
 `status` is `active` or `unauthorized`. An `unauthorized` account is still listed but its platform rejected the stored token (a locked Facebook profile, a security checkpoint, a page the user lost access to); `unauthorizedReason` carries the platform's message. Do not schedule to it: `POST /social-posts` refuses it with `400`. Tell the user to reconnect it in the AdaptlyPost dashboard. Once they say they have, or when a post failed with a token error and you want to confirm the page is back, run `POST /social-accounts/:id/check` to re-probe the platform now; it returns the fresh `status`. Facebook pages are also re-checked automatically twice a day. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field, the page's public ID on facebook.com, shown because pages have no `username`. `pageIds` accepts either that `pageId` or the account `id`, so both work.
 
@@ -231,9 +235,10 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 ```
 
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
-For carousel: upload multiple files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`.
+For carousel: upload 2 or more files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`. The most a platform takes is 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook and Threads, 20 on LinkedIn and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos; the others take images only, and YouTube has no carousel.
 For a LinkedIn document (PDF, slide deck or Word file shown as a swipeable document): upload the one file (keep its extension in `fileName`), use `contentType: "DOCUMENT"`, put that single URL in `mediaUrls`, target only `LINKEDIN`, and optionally name it with `"linkedinConfigs": [{ "connectionId": "LINKEDIN_ID", "documentTitle": "Q3 results" }]` (max 100 chars, defaults to the file name). DOCUMENT on another platform, a second file, or a document on a non-DOCUMENT post returns 400.
-For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube and videos ignore it.
+For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube, Google Business Profile and videos ignore it.
+For a different video thumbnail per platform: `platformThumbnails`, see [Per-platform extras](#per-platform-extras). To reframe images to one shape on Instagram or TikTok: `platformAspectRatios`, same section.
 
 ### 6. List posts
 
@@ -330,7 +335,7 @@ curl -X POST   .../social-posts/POST_ID/unschedule
 curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
 ```
 
-`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
+`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
 
 Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time it already has is fine, even once that time has passed. To publish it now, call `/publish` without `scheduledAt`.
 
@@ -338,7 +343,7 @@ Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns 
 
 `DELETE` removes the record from AdaptlyPost, and a deleted scheduled post will not publish. It never removes content already on a network: deleting a `COMPLETED` post only drops AdaptlyPost's record, and removing the live post is a manual step per platform. Prefer `PATCH` over delete-and-recreate.
 
-`POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. Omit `scheduledAt` (or pass a past time) and the post moves to `PENDING` with a publishing job queued per platform, so the content reaches the networks within moments and cannot be recalled. A future `scheduledAt` sets `SCHEDULED` and queues nothing yet. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
+`POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. A future `scheduledAt` needs `posts.schedule` and publishing now needs `posts.publish`, so a Contributor key gets `403 permission_denied` here. Omit `scheduledAt` (or pass a past time) and the post moves to `PENDING` with a publishing job queued per platform, so the content reaches the networks within moments and cannot be recalled. A future `scheduledAt` sets `SCHEDULED` and queues nothing yet. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
 
 ### 12. Repeat a post on a schedule
 
@@ -361,8 +366,8 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 `recurrence` fields:
 
-- `frequency` (required): `DAILY`, `WEEKLY` or `MONTHLY`
-- `interval`: repeat every N days, weeks or months, 1 to 30, default 1
+- `frequency` (required): `DAILY`, `WEEKLY`, `MONTHLY` or `YEARLY`. `YEARLY` posts on the same date every year; a series started on February 29 posts on February 28 in other years
+- `interval`: repeat every N days, weeks, months or years, 1 to 30, default 1
 - `weekdays`: `WEEKLY` only, for example `["MONDAY", "FRIDAY"]`. The weekday of `scheduledAt` is always included
 - `endsOn`: `YYYY-MM-DD`, the last day a post may go out on (inclusive). It must be on or after the day of the first post
 - `maxOccurrences`: total number of posts the series publishes, 2 to 365
@@ -419,7 +424,7 @@ The response contains a `whsec_` signing secret, and that is the only time it is
 
 ### 15. Read the numbers
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and YouTube for the last 180 days. X and Mastodon have no analytics here, and LinkedIn analytics are waiting on LinkedIn's approval, so all three return nothing. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, YouTube, X, LinkedIn and Google Business Profile. Google Business Profile reports only how often the location was seen, so its posts have no numbers of their own. Mastodon and Telegram have no analytics and return nothing. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while it stays connected, so any range in that history can be queried. A post keeps refreshing for 180 days after it is published, then holds its last numbers. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
@@ -446,12 +451,13 @@ Pass these as config arrays in the request body. See [references/platform-config
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
 | **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
-| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only) |
-| **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle` |
+| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `audio` (Reels) |
+| **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background) |
+| **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (required), `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
-| **X (Twitter)** | — | No config object, uses `twitterConnectionIds` only |
+| **X (Twitter)** | — | No config object, uses `twitterConnectionIds`; top-level `twitterKeepLinks` keeps links clickable |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds` only |
 | **Mastodon** | — | No config object, uses `mastodonConnectionIds` only |
 | **Threads** | — | No config object, uses `threadsConnectionIds` only |
@@ -480,6 +486,69 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
   }'
 ```
 
+### Google Business Profile
+
+Put the location's account `id` in `googleBusinessConnectionIds`. A Google Business Profile post is `TEXT` or `IMAGE` with one JPEG or PNG up to 5 MB, text up to 1500 characters, and no alt text. Without a config entry the location gets a plain update (`STANDARD`).
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["GOOGLE_BUSINESS"],
+    "contentType": "TEXT",
+    "text": "Live jazz on Friday night. Book a table!",
+    "timezone": "Europe/Berlin",
+    "scheduledAt": "2026-10-20T09:00:00.000Z",
+    "googleBusinessConnectionIds": ["GBP_LOCATION_ID"],
+    "googleBusinessConfigs": [{
+      "connectionId": "GBP_LOCATION_ID",
+      "topicType": "EVENT",
+      "eventTitle": "Jazz night",
+      "eventStart": "2026-10-24T19:00",
+      "eventEnd": "2026-10-24T23:00",
+      "callToActionType": "BOOK",
+      "callToActionUrl": "https://example.com/book"
+    }]
+  }'
+```
+
+`EVENT` and `OFFER` need `eventTitle`, `eventStart` and `eventEnd`, each `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` in the business's local time with no offset. An `OFFER` can add `offerCouponCode`, `offerRedeemUrl` and `offerTerms`. `callToActionType` is `BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP` or `CALL`; every type except `CALL` needs `callToActionUrl`, and `CALL` dials the phone number on the Business Profile.
+
+### Instagram audio
+
+To add music or an original sound to a Reel, search the audio library through an Instagram account whose `supportsInstagramAudio` is true:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/social-accounts/INSTAGRAM_ID/instagram-audio?audioType=music&searchQuery=summer"
+```
+
+`audioType` is `music` or `original_sound`. Leave out `searchQuery` for trending audio. Returns `{ "audio": [{ "audioId", "audioType", "title", "displayArtist", "igUsername", "durationMs", "coverArtworkUrl", "previewUrl", "instagramUrl", "isAdsEligible" }] }`. `previewUrl` expires after about 1.5 days. Only audio Meta cleared for third-party publishing comes back, which can differ from what the Instagram app shows. An account not connected through Facebook gets `400`. Then pass the pick in the Instagram config of a `VIDEO` post that is not a story:
+
+```json
+"instagramConfigs": [{
+  "connectionId": "INSTAGRAM_ID",
+  "postType": "REEL",
+  "audio": { "audioId": "AUDIO_ID", "title": "Track title", "artist": "Artist", "audioVolume": 80, "videoVolume": 30 }
+}]
+```
+
+Volumes are 1 to 100 and default to 100. `title` and `artist` are stored for display only, so copy them from the search result.
+
+### Per-platform extras
+
+All optional, and each takes at most one entry per platform. A platform the field does not support returns `400`.
+
+- `firstComments`: `[{ "platform": "LINKEDIN", "text": "Sign up at example.com" }]`. Posted from the same account about 10 seconds after the platform publishes (60 on YouTube): a comment on LinkedIn (1250 characters) and YouTube (10000), a reply on X (280), Threads (500), Bluesky (300) and Mastodon (500). The platform must be one the post goes to. Not for private or made for kids YouTube videos or Facebook and Instagram stories. Retried up to 3 times, except on X, where it is not retried and costs credits like any X post on a lifetime-deal account. A failed comment never fails the post; read `firstCommentStatus` (`PENDING`, `PUBLISHED`, `FAILED`) and `firstCommentError` on the post's platform entry. Not on the bulk top level; bulk items take it.
+- `platformThumbnails`: `[{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` for `VIDEO` posts. YouTube, Facebook and LinkedIn take an image; Instagram and Pinterest take an image or a frame (`thumbnailTimestampMs`), the image winning when both are sent; TikTok takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`. Not for Facebook or Instagram stories.
+- `platformAspectRatios`: `[{ "platform": "INSTAGRAM", "aspectRatio": "PORTRAIT", "fit": "PAD" }]` for `IMAGE` and `CAROUSEL` posts. `SQUARE` is 1:1, `PORTRAIT` 4:5, `VERTICAL` 9:16, `LANDSCAPE` 1.91:1. Instagram takes all but `VERTICAL`, TikTok takes all four, and no other platform takes any. `fit` is `CROP` (the default, cut from the center) or `PAD` (keep the whole image and fill the rest with a blurred copy). Not for Instagram stories.
+- `twitterKeepLinks: true`: keeps links in X text clickable. By default every link in X text is broken (`example.com` becomes `example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; any other plan gets `400`. `POST /social-posts` and `PATCH` only, not bulk.
+- `instagramConfigs[].shareToStory` and `facebookConfigs[].shareToStory`: also publish the same media as a story next to the feed post or reel. The story is its own entry in `platforms` with `postType: STORY` and succeeds, fails and retries on its own. It skips the caption and first comment, and a story video must be 60 seconds or shorter.
+- `instagramConfigs[].collaborators`: up to 3 Instagram usernames invited as collaborators on a feed image, carousel or reel. Each has to accept the invite in Instagram.
+- `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
+- LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
+
 ## Supported File Types for Upload
 
 | MIME Type | Extension | Use For |
@@ -502,15 +571,16 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 | Platform | Images | Video | Carousel |
 | --- | --- | --- | --- |
 | TikTok | Carousels only | MP4/MOV, ≤250MB, 3s-10min | 2-35 images |
-| Instagram | JPEG/PNG | ≤1GB, 3-90s (Reels) | Up to 10 |
+| Instagram | JPEG/PNG | ≤1GB, feed and Reels up to 15 min | Up to 10, images and videos |
 | Facebook | ≤30MB, JPG/PNG | 1 per post | Up to 10 images |
 | YouTube | — | Shorts ≤3min, H.264 | — |
-| LinkedIn | Up to 9 | ≤10min | Up to 9; or one PDF/PPT/PPTX/DOC/DOCX document ≤100MB, 300 pages |
-| X (Twitter) | Up to 4 | — | — |
+| LinkedIn | Supported | ≤10min | Up to 20 images; or one PDF/PPT/PPTX/DOC/DOCX document ≤100MB, 300 pages |
+| X (Twitter) | Supported | — | Up to 4 images |
 | Pinterest | 2:3 ratio ideal | Supported | 2-5 images |
-| Bluesky | Up to 4 | Not supported | — |
+| Bluesky | Supported | Not supported | Up to 4 images |
 | Mastodon | Up to 4 (server can allow more) | 1 per post | Up to 4 |
-| Threads | Supported | Supported | Up to 10 |
+| Threads | Supported | Supported | Up to 10, images and videos |
+| Google Business Profile | One JPEG or PNG, ≤5MB | Not supported | — |
 
 ## Tips for the Agent
 
@@ -524,7 +594,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - If the user says "post now", "publish now", or "right away": **completely omit `scheduledAt` from the request body** — do NOT set it to a time in the near future. The API publishes immediately when `scheduledAt` is absent.
 - If the user says "schedule": ask for the date and time, then set `scheduledAt` to an ISO 8601 timestamp.
 - If the user says "draft": set `saveAsDraft: true` and omit `scheduledAt`.
-- If the user says "every Monday", "daily" or "each month": ask for the first date and time and for when it stops (an end date, a number of posts, or never), then send `recurrence` with a future `scheduledAt` (step 12). A recurring post cannot be a draft.
+- If the user says "every Monday", "daily", "each month" or "every year": ask for the first date and time and for when it stops (an end date, a number of posts, or never), then send `recurrence` with a future `scheduledAt` (step 12). A recurring post cannot be a draft.
 
 ### Timezone handling
 
@@ -539,13 +609,16 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.
 - `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
-- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
+- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`, `googleBusinessConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
+- `TELEGRAM` shows up on posts made in the app, but the API cannot post to Telegram. Never put it in `platforms`.
+- Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - Pinterest configs **require** `boardId` — there is no way to fetch boards via this API currently, so ask the user which board to use.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - A recurring post repeats the same text, which X and LinkedIn reject as a duplicate. Put spintax such as `{Hi|Hello}` in the text so each post differs.
-- Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (multiple images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).
+- Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (2 or more images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).
+- A published platform entry carries a `postUrl` on every platform. Instagram and Facebook stories expire after 24 hours, so theirs links to the profile or page.
 - Check `skippedPlatforms` in the response — it tells you if any platform was skipped and why.
 - Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.

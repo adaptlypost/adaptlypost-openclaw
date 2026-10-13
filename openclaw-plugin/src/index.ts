@@ -23,21 +23,28 @@ import {
   UPLOAD_TOOL,
 } from "./approvals.js";
 
-const Platform = Type.Union(
-  [
-    Type.Literal("LINKEDIN"),
-    Type.Literal("YOUTUBE"),
-    Type.Literal("INSTAGRAM"),
-    Type.Literal("FACEBOOK"),
-    Type.Literal("TIKTOK"),
-    Type.Literal("PINTEREST"),
-    Type.Literal("THREADS"),
-    Type.Literal("BLUESKY"),
-    Type.Literal("TWITTER"),
-    Type.Literal("MASTODON"),
-  ],
-  { description: "AdaptlyPost platform identifier." },
-);
+const POSTABLE_PLATFORMS = [
+  Type.Literal("LINKEDIN"),
+  Type.Literal("YOUTUBE"),
+  Type.Literal("INSTAGRAM"),
+  Type.Literal("FACEBOOK"),
+  Type.Literal("TIKTOK"),
+  Type.Literal("PINTEREST"),
+  Type.Literal("THREADS"),
+  Type.Literal("BLUESKY"),
+  Type.Literal("TWITTER"),
+  Type.Literal("MASTODON"),
+  Type.Literal("GOOGLE_BUSINESS"),
+];
+
+const Platform = Type.Union(POSTABLE_PLATFORMS, {
+  description: "AdaptlyPost platform to post to. GOOGLE_BUSINESS is Google Business Profile.",
+});
+
+const AnyPlatform = Type.Union([...POSTABLE_PLATFORMS, Type.Literal("TELEGRAM")], {
+  description:
+    "AdaptlyPost platform identifier. TELEGRAM posts are created in the AdaptlyPost app only, so they can be listed but not posted from here.",
+});
 
 const PostStatus = Type.Union([
   Type.Literal("DRAFT"),
@@ -63,11 +70,15 @@ const Weekday = Type.Union([
 
 const Recurrence = Type.Object(
   {
-    frequency: Type.Union([Type.Literal("DAILY"), Type.Literal("WEEKLY"), Type.Literal("MONTHLY")], {
-      description: "How often the post repeats.",
-    }),
+    frequency: Type.Union(
+      [Type.Literal("DAILY"), Type.Literal("WEEKLY"), Type.Literal("MONTHLY"), Type.Literal("YEARLY")],
+      {
+        description:
+          "How often the post repeats. YEARLY posts on the same date every year; a series started on February 29 posts on February 28 in other years.",
+      },
+    ),
     interval: Type.Optional(
-      Type.Integer({ minimum: 1, maximum: 30, description: "Repeat every N days, weeks or months. Defaults to 1." }),
+      Type.Integer({ minimum: 1, maximum: 30, description: "Repeat every N days, weeks, months or years. Defaults to 1." }),
     ),
     weekdays: Type.Optional(
       Type.Array(Weekday, {
@@ -117,9 +128,9 @@ const AnalyticsRangeFields = {
   }),
   to: Type.String({ description: "End of the reporting window, ISO 8601. Not earlier than from." }),
   platforms: Type.Optional(
-    Type.Array(Platform, {
+    Type.Array(AnyPlatform, {
       description:
-        "Restrict to these platforms; omit for every platform with analytics. TWITTER and MASTODON have none and are ignored; LINKEDIN returns no data until LinkedIn approves analytics access.",
+        "Restrict to these platforms; omit for every platform with analytics. MASTODON and TELEGRAM have none and are ignored.",
     }),
   ),
 };
@@ -134,6 +145,12 @@ const ConnectionIdFields = {
   blueskyConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Bluesky connection ids." })),
   mastodonConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Mastodon connection ids." })),
   pinterestConnectionIds: Type.Optional(Type.Array(Type.String(), { description: "Pinterest connection ids." })),
+  googleBusinessConnectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Google Business Profile location ids from adaptlypost_accounts (platform GOOGLE_BUSINESS, displayName is the location title). A location without a googleBusinessConfigs entry posts a STANDARD update.",
+    }),
+  ),
   pageIds: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -184,7 +201,50 @@ const PlatformConfigFields = {
         trialGraduation: Type.Optional(
           Type.Union([Type.Literal("MANUAL"), Type.Literal("SS_PERFORMANCE")]),
         ),
+        shareToStory: Type.Optional(
+          Type.Boolean({
+            description:
+              "Also publish the same media as a story next to the FEED or REEL post. The story is its own entry in the post's platforms and succeeds, fails and retries on its own. It skips the caption, first comment, cover, collaborators, trial and audio, needs IMAGE, VIDEO or CAROUSEL, and a video must be 60 seconds or shorter. Ignored when postType is STORY.",
+          }),
+        ),
+        collaborators: Type.Optional(
+          Type.Array(Type.String({ pattern: "^@?[A-Za-z0-9._]{1,30}$" }), {
+            maxItems: 3,
+            description:
+              "Up to 3 Instagram usernames invited as collaborators. Feed images, carousels and reels only; a story or trial reel with collaborators is a 400. Each collaborator must accept the invite in Instagram before the post shows on their profile.",
+          }),
+        ),
+        audio: Type.Optional(
+          Type.Object(
+            {
+              audioId: Type.String({
+                maxLength: 64,
+                description: "audioId from adaptlypost_search_instagram_audio.",
+              }),
+              title: Type.Optional(
+                Type.String({ maxLength: 255, description: "Track title, shown in the approval prompt and stored for display." }),
+              ),
+              artist: Type.Optional(
+                Type.String({ maxLength: 255, description: "Artist or creator, shown in the approval prompt and stored for display." }),
+              ),
+              audioVolume: Type.Optional(
+                Type.Integer({ minimum: 1, maximum: 100, description: "Volume of the added audio, 1 to 100. Defaults to 100." }),
+              ),
+              videoVolume: Type.Optional(
+                Type.Integer({ minimum: 1, maximum: 100, description: "Volume of the video's own sound, 1 to 100. Defaults to 100." }),
+              ),
+            },
+            {
+              description:
+                "Music or an original sound added to a Reel. Needs contentType VIDEO, a postType other than STORY, and an account whose supportsInstagramAudio is true in adaptlypost_accounts.",
+            },
+          ),
+        ),
       }),
+      {
+        description:
+          "Instagram per-connection config. postType STORY takes IMAGE, VIDEO or CAROUSEL; a CAROUSEL story publishes each item as its own story, in order.",
+      },
     ),
   ),
   facebookConfigs: Type.Optional(
@@ -195,8 +255,24 @@ const PlatformConfigFields = {
           Type.Union([Type.Literal("FEED"), Type.Literal("REEL"), Type.Literal("STORY")]),
         ),
         videoTitle: Type.Optional(Type.String({ maxLength: 255 })),
+        shareToStory: Type.Optional(
+          Type.Boolean({
+            description:
+              "Also publish the same media as a story next to the FEED or REEL post. The story skips the caption, video title and text background, needs IMAGE, VIDEO or CAROUSEL, and a video must be 60 seconds or shorter. Ignored when postType is STORY.",
+          }),
+        ),
+        textFormatPresetId: Type.Optional(
+          Type.String({
+            pattern: "^\\d{1,20}$",
+            description:
+              "Facebook's id for a colored text background, for example 106018623298955 (solid purple) or 249307305544279 (red to blue gradient). Only for contentType TEXT with no media and text up to 130 characters. Links show without a preview. If Facebook refuses the background, the post goes out as plain text.",
+          }),
+        ),
       }),
-      { description: "Facebook per-page config. pageId must match an entry in pageIds." },
+      {
+        description:
+          "Facebook per-page config. pageId must match an entry in pageIds. postType STORY takes IMAGE, VIDEO or CAROUSEL; a CAROUSEL story publishes each item as its own story.",
+      },
     ),
   ),
   linkedinConfigs: Type.Optional(
@@ -226,13 +302,118 @@ const PlatformConfigFields = {
       }),
     ),
   ),
+  googleBusinessConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String({ description: "A location id from googleBusinessConnectionIds." }),
+        topicType: Type.Union([Type.Literal("STANDARD"), Type.Literal("EVENT"), Type.Literal("OFFER")], {
+          description: "STANDARD is an update. EVENT and OFFER need eventTitle, eventStart and eventEnd.",
+        }),
+        callToActionType: Type.Optional(
+          Type.Union(
+            [
+              Type.Literal("BOOK"),
+              Type.Literal("ORDER"),
+              Type.Literal("SHOP"),
+              Type.Literal("LEARN_MORE"),
+              Type.Literal("SIGN_UP"),
+              Type.Literal("CALL"),
+            ],
+            {
+              description:
+                "Button shown on the post. Every type except CALL needs callToActionUrl; CALL dials the phone number on the Business Profile.",
+            },
+          ),
+        ),
+        callToActionUrl: Type.Optional(Type.String({ description: "https URL the button opens. Ignored for CALL." })),
+        eventTitle: Type.Optional(Type.String()),
+        eventStart: Type.Optional(
+          Type.String({
+            pattern: "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2})?$",
+            description: "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset.",
+          }),
+        ),
+        eventEnd: Type.Optional(
+          Type.String({
+            pattern: "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2})?$",
+            description: "YYYY-MM-DD or YYYY-MM-DDTHH:mm in the business's local time, with no offset.",
+          }),
+        ),
+        offerCouponCode: Type.Optional(Type.String({ description: "OFFER only." })),
+        offerRedeemUrl: Type.Optional(Type.String({ description: "OFFER only: https URL where the offer is redeemed." })),
+        offerTerms: Type.Optional(Type.String({ description: "OFFER only: terms and conditions." })),
+      }),
+      {
+        description:
+          "Google Business Profile per-location options. Google Business Profile takes contentType TEXT or IMAGE with one JPEG or PNG image up to 5 MB, text up to 1500 characters, and no alt text.",
+      },
+    ),
+  ),
 };
+
+const FirstComment = Type.Object({
+  platform: Type.Union([
+    Type.Literal("LINKEDIN"),
+    Type.Literal("TWITTER"),
+    Type.Literal("THREADS"),
+    Type.Literal("BLUESKY"),
+    Type.Literal("MASTODON"),
+    Type.Literal("YOUTUBE"),
+  ]),
+  text: Type.String({
+    minLength: 1,
+    maxLength: 10000,
+    description:
+      "Comment text. Limits: LINKEDIN 1250, TWITTER 280, THREADS 500, BLUESKY 300, MASTODON 500, YOUTUBE 10000 characters.",
+  }),
+});
+
+const PlatformThumbnail = Type.Object({
+  platform: Type.Union([
+    Type.Literal("YOUTUBE"),
+    Type.Literal("FACEBOOK"),
+    Type.Literal("LINKEDIN"),
+    Type.Literal("INSTAGRAM"),
+    Type.Literal("PINTEREST"),
+    Type.Literal("TIKTOK"),
+  ]),
+  thumbnailUrl: Type.Optional(
+    Type.String({
+      description:
+        "Image for this platform's thumbnail: an https URL or an image data URI. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM and PINTEREST take one; TIKTOK does not.",
+    }),
+  ),
+  thumbnailTimestampMs: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      description:
+        "Video frame (ms from the start) to use instead. INSTAGRAM, PINTEREST and TIKTOK take one; the image wins when both are sent.",
+    }),
+  ),
+});
+
+const PlatformAspectRatio = Type.Object({
+  platform: Type.Union([Type.Literal("INSTAGRAM"), Type.Literal("TIKTOK")]),
+  aspectRatio: Type.Union(
+    [Type.Literal("SQUARE"), Type.Literal("PORTRAIT"), Type.Literal("VERTICAL"), Type.Literal("LANDSCAPE")],
+    {
+      description:
+        "SQUARE is 1:1, PORTRAIT 4:5, VERTICAL 9:16, LANDSCAPE 1.91:1. INSTAGRAM takes SQUARE, PORTRAIT or LANDSCAPE; TIKTOK takes all four.",
+    },
+  ),
+  fit: Type.Optional(
+    Type.Union([Type.Literal("CROP"), Type.Literal("PAD")], {
+      description:
+        "CROP (default) cuts the image from the center; PAD keeps the whole image and fills the rest with a blurred copy.",
+    }),
+  ),
+});
 
 export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky and Mastodon, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -273,7 +454,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all ten platforms. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, and pageId for Facebook pages. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all eleven platforms you can post to. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram accounts. A Google Business Profile account (platform GOOGLE_BUSINESS) is one location: displayName is its title and username is empty. Telegram chats are not listed, because Telegram posts are created in the AdaptlyPost app only. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds, Google Business Profile locations in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -294,6 +475,37 @@ export default definePluginEntry({
         const { account_id: accountId } = params as { account_id: string };
         return jsonResult(
           await callApi(cfg(), "POST", `/social-accounts/${encodeURIComponent(accountId)}/check`, {
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_search_instagram_audio",
+      label: "AdaptlyPost: search Instagram audio",
+      description:
+        "Search Instagram music and original sounds to add to a Reel. Only works for an Instagram account whose supportsInstagramAudio is true in adaptlypost_accounts (connected through Facebook); other accounts get a 400, as does a search Instagram rejects. Leave out searchQuery for trending audio. Returns { audio } with audioId, audioType, title, displayArtist (music), igUsername (original sounds), durationMs, coverArtworkUrl, profilePictureUrl, previewUrl (expires after about 1.5 days), instagramUrl and isAdsEligible. Pass the chosen audioId, with its title and artist, as instagramConfigs[].audio in adaptlypost_create_post. Only audio Meta cleared for third-party publishing is returned, which can differ from what the Instagram app shows.",
+      parameters: Type.Object({
+        account_id: Type.String({
+          description: "Instagram account id from adaptlypost_accounts with supportsInstagramAudio true.",
+        }),
+        audioType: Type.Union([Type.Literal("music"), Type.Literal("original_sound")], {
+          description: "music for licensed tracks, original_sound for sounds from other Instagram posts.",
+        }),
+        searchQuery: Type.Optional(
+          Type.String({ maxLength: 100, description: "Keyword filter. Leave out for trending audio." }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const { account_id: accountId, ...query } = params as {
+          account_id: string;
+          audioType: string;
+          searchQuery?: string;
+        };
+        return jsonResult(
+          await callApi(cfg(), "GET", `/social-accounts/${encodeURIComponent(accountId)}/instagram-audio`, {
+            query,
             signal,
           }),
         );
@@ -346,7 +558,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel; Pinterest needs pinterestConfigs with boardId. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, audio and story sharing, Google Business Profile topics and buttons, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: Type.Object({
         platforms: Type.Array(Platform, {
           minItems: 1,
@@ -370,6 +582,12 @@ export default definePluginEntry({
         platformTexts: Type.Optional(
           Type.Array(Type.Object({ platform: Platform, text: Type.String() }), {
             description: "Per-platform caption overrides.",
+          }),
+        ),
+        firstComments: Type.Optional(
+          Type.Array(FirstComment, {
+            description:
+              "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn and YouTube, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
           }),
         ),
         mediaUrls: Type.Optional(
@@ -399,7 +617,37 @@ export default definePluginEntry({
               "IANA timezone stored with the post for display, defaults to UTC; it does not shift scheduledAt.",
           }),
         ),
-        thumbnailUrl: Type.Optional(Type.String({ description: "Custom thumbnail for video posts." })),
+        thumbnailUrl: Type.Optional(
+          Type.String({
+            description:
+              "Video thumbnail as an https URL or image data URI, used on every platform that takes one unless platformThumbnails overrides it.",
+          }),
+        ),
+        thumbnailTimestampMs: Type.Optional(
+          Type.Integer({
+            minimum: 0,
+            description:
+              "Video frame (ms) to use as the thumbnail on INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it.",
+          }),
+        ),
+        platformThumbnails: Type.Optional(
+          Type.Array(PlatformThumbnail, {
+            description:
+              "A different thumbnail for one platform of a VIDEO post, one entry per platform. Platforms without an entry use thumbnailUrl and thumbnailTimestampMs. Not for Facebook or Instagram stories.",
+          }),
+        ),
+        platformAspectRatios: Type.Optional(
+          Type.Array(PlatformAspectRatio, {
+            description:
+              "Reframe every image of an IMAGE or CAROUSEL post to one shape on INSTAGRAM or TIKTOK, one entry per platform. Not for video posts or Instagram stories. Omit a platform to keep its images as uploaded.",
+          }),
+        ),
+        twitterKeepLinks: Type.Optional(
+          Type.Boolean({
+            description:
+              "Keep links in the X text clickable. By default every link in X text is broken (example.com becomes example. com) because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn this on, and a kept link costs 20 credits instead of 2; true on any other plan is a 400. Ignored when the X text has no link.",
+          }),
+        ),
         recurrence: Type.Optional(Recurrence),
         ...ConnectionIdFields,
         ...PlatformConfigFields,
@@ -436,7 +684,7 @@ export default definePluginEntry({
           Type.Array(PostStatus, { description: "Filter by post status; omit for all statuses." }),
         ),
         platforms: Type.Optional(
-          Type.Array(Platform, { description: "Filter to posts targeting any of these platforms." }),
+          Type.Array(AnyPlatform, { description: "Filter to posts targeting any of these platforms." }),
         ),
         startDate: Type.Optional(
           Type.String({
@@ -629,7 +877,7 @@ export default definePluginEntry({
       name: "adaptlypost_analytics_overview",
       label: "AdaptlyPost: analytics overview",
       description:
-        "Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use it for 'how did we do this month' and follower questions. partialMetrics names metrics some selected platform cannot report; a metric no platform reports is null, so say so rather than reporting zero. Analytics cover the last 180 days and refresh every few hours (lastSyncedAt says when). Not for delivery status: adaptlypost_post_results answers 'did it publish', this answers 'how did it do'.",
+        "Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use it for 'how did we do this month' and follower questions. partialMetrics names metrics some selected platform cannot report; a metric no platform reports is null, so say so rather than reporting zero. Connecting an account imports its posts from the last 180 days, and numbers refresh every few hours (lastSyncedAt says when). Google Business Profile reports only how often the location was seen (impressions); Mastodon and Telegram have no analytics. Not for delivery status: adaptlypost_post_results answers 'did it publish', this answers 'how did it do'.",
       parameters: Type.Object(AnalyticsRangeFields),
       async execute(_toolCallId, params, signal) {
         return jsonResult(
@@ -645,7 +893,7 @@ export default definePluginEntry({
       name: "adaptlypost_post_analytics",
       label: "AdaptlyPost: per-post analytics",
       description:
-        "Per-post metrics for posts published inside a date window, sorted by a metric or by publish date, paginated. Use it for 'top posts', 'which post got the most comments' and 'how did post X do'. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Posts published outside AdaptlyPost are included with postId null. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review.",
+        "Per-post metrics for posts published inside a date window, sorted by a metric or by publish date, paginated. Use it for 'top posts', 'which post got the most comments' and 'how did post X do'. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Posts published outside AdaptlyPost are included with postId null. Google Business Profile posts are listed with every metric null, because Google reports only location-level impressions. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review.",
       parameters: Type.Object({
         ...AnalyticsRangeFields,
         sortBy: Type.Optional(AnalyticsSortMetric),

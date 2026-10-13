@@ -1,7 +1,8 @@
 # AdaptlyPost plugin for OpenClaw
 
 Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok,
-YouTube, Pinterest, Threads and Bluesky, from inside OpenClaw.
+YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile, from
+inside OpenClaw.
 
 ## Install
 
@@ -70,7 +71,11 @@ a scheduled post (Contributor and Viewer), is refused before the prompt.
 
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
-and every caption including per-platform overrides. OpenClaw caps a prompt at
+and every caption including per-platform overrides. It also lists each first
+comment, Instagram collaborators, audio and story sharing, Facebook story
+sharing and text backgrounds, the Google Business Profile topic, event, offer
+and button, per-platform thumbnails and image shapes, and X links that stay
+clickable. OpenClaw caps a prompt at
 512 characters. When a call doesn't fit, the plugin refuses it instead of
 cutting anything, and tells the agent to save a draft or split the call. The
 prompt offers "allow once" and "deny", never "always". The plugin ties each approval
@@ -106,6 +111,7 @@ OpenClaw's plugin permission requests docs.
 |---|---|
 | `adaptlypost_accounts` | List connected accounts and their connection ids, with `status` (`active` or `unauthorized`). Call this first. |
 | `adaptlypost_check_account` | Ask Facebook right now whether a page's token still works and return its fresh status. Use after the user reconnects a page. |
+| `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
@@ -120,7 +126,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Fifteen tools, fewer than the MCP server exposes. Post editing, deletion,
+Sixteen tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the
@@ -135,8 +141,24 @@ username, so they carry a `pageId` and go in `pageIds`.
 TikTok needs `privacyLevel` in `tiktokConfigs` and has no default. Pinterest
 needs `boardId`. Both reject the post outright without them.
 
-`recurrence` on `adaptlypost_create_post` repeats a post daily, weekly or
-monthly. It needs mode SCHEDULE, since the first post sets the time of day, and
+Google Business Profile locations go in `googleBusinessConnectionIds`. A post
+there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500
+characters. Without a `googleBusinessConfigs` entry it goes out as a plain
+update; set `topicType` to `EVENT` or `OFFER` for an event or offer, and
+`callToActionType` for a button. Telegram posts can only be created in the
+AdaptlyPost app.
+
+`firstComments` adds a comment from the same account right after the post goes
+out on LinkedIn and YouTube, or a reply on X, Threads, Bluesky and Mastodon. A
+failed comment never fails the post.
+
+To add music to an Instagram Reel, find an `audioId` with
+`adaptlypost_search_instagram_audio` and pass it in `instagramConfigs[].audio`.
+It works for Instagram accounts connected through Facebook, which
+`adaptlypost_accounts` marks with `supportsInstagramAudio: true`.
+
+`recurrence` on `adaptlypost_create_post` repeats a post daily, weekly,
+monthly or yearly. It needs mode SCHEDULE, since the first post sets the time of day, and
 it cannot include TikTok. X and LinkedIn reject repeated identical text, so put
 spintax such as `{Hi|Hello}` in the caption. Editing a series or skipping one
 date happens in the AdaptlyPost app.
@@ -150,9 +172,12 @@ platform rather than treating a post as one pass or fail. A platform
 restriction is that platform's decision about the account, and retrying will
 not clear it. A dead token or rejected media will.
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky and
-YouTube for the last 180 days. X has no analytics here and LinkedIn's are
-waiting on LinkedIn's approval, so both come back empty. A `null` metric means
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky,
+YouTube, X, LinkedIn and Google Business Profile. Google Business Profile
+reports how often the location was seen, with no numbers per post. Mastodon and
+Telegram have no analytics, so they come back empty. Connecting an account
+imports its posts from the last 180 days, and analytics are kept from then on
+while it stays connected. A `null` metric means
 the platform does not report it, which is not the same as zero.
 
 The API allows 600 requests per minute per token. A 429 comes back with

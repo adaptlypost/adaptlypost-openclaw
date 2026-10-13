@@ -101,6 +101,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   BLUESKY: "Bluesky",
   TWITTER: "X",
   MASTODON: "Mastodon",
+  GOOGLE_BUSINESS: "Google Business Profile",
+  TELEGRAM: "Telegram",
 };
 
 const CONNECTION_FIELDS: Record<string, string> = {
@@ -114,6 +116,7 @@ const CONNECTION_FIELDS: Record<string, string> = {
   BLUESKY: "blueskyConnectionIds",
   TWITTER: "twitterConnectionIds",
   MASTODON: "mastodonConnectionIds",
+  GOOGLE_BUSINESS: "googleBusinessConnectionIds",
 };
 
 type Account = {
@@ -193,6 +196,7 @@ const FREQUENCY_LABELS: Record<string, { once: string; unit: string }> = {
   DAILY: { once: "daily", unit: "days" },
   WEEKLY: { once: "weekly", unit: "weeks" },
   MONTHLY: { once: "monthly", unit: "months" },
+  YEARLY: { once: "yearly", unit: "years" },
 };
 
 function weekdayOf(instant: string, timeZone: string): string | undefined {
@@ -282,6 +286,65 @@ function configEntries(params: Record<string, unknown>, key: string): ConfigEntr
   return Array.isArray(params[key]) ? (params[key] as ConfigEntry[]) : [];
 }
 
+function platformLabel(platform: unknown): string {
+  return PLATFORM_LABELS[String(platform)] ?? String(platform);
+}
+
+function handles(value: unknown): string {
+  return stringArray(value)
+    .map((name) => `@${name.replace(/^@/, "")}`)
+    .join(", ");
+}
+
+function audioLabel(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const audio = value as ConfigEntry;
+  const name = nonEmpty(audio.title) ? `"${audio.title}"${nonEmpty(audio.artist) ? ` by ${audio.artist}` : ""} ` : "";
+  const volumes = [
+    typeof audio.audioVolume === "number" ? `volume ${audio.audioVolume}%` : undefined,
+    typeof audio.videoVolume === "number" ? `video sound ${audio.videoVolume}%` : undefined,
+  ].filter(nonEmpty);
+  return `audio ${name}(id ${String(audio.audioId)})${volumes.length ? `, ${volumes.join(", ")}` : ""}`;
+}
+
+function instagramLine(entry: ConfigEntry): string {
+  const postType = String(entry.postType ?? "FEED");
+  const parts = [postType];
+  if (entry.trialGraduation === "MANUAL") parts.push("trial reel you share to followers yourself");
+  if (entry.trialGraduation === "SS_PERFORMANCE") parts.push("trial reel Instagram shares if it performs well");
+  if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
+  const collaborators = handles(entry.collaborators);
+  if (collaborators) parts.push(`collaborators ${collaborators}`);
+  const audio = audioLabel(entry.audio);
+  if (audio) parts.push(audio);
+  return `Instagram: ${parts.join(", ")}`;
+}
+
+function facebookLine(entry: ConfigEntry): string {
+  const postType = String(entry.postType ?? "FEED");
+  const parts = [postType];
+  if (nonEmpty(entry.videoTitle)) parts.push(`title "${entry.videoTitle}"`);
+  if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
+  if (nonEmpty(entry.textFormatPresetId)) parts.push(`colored background ${entry.textFormatPresetId}`);
+  return `Facebook: ${parts.join(", ")}`;
+}
+
+function googleBusinessLine(entry: ConfigEntry): string {
+  const parts = [String(entry.topicType ?? "STANDARD")];
+  if (nonEmpty(entry.eventTitle)) parts.push(`"${entry.eventTitle}"`);
+  if (nonEmpty(entry.eventStart) || nonEmpty(entry.eventEnd)) {
+    parts.push(`${String(entry.eventStart ?? "?")} to ${String(entry.eventEnd ?? "?")}`);
+  }
+  if (nonEmpty(entry.callToActionType)) {
+    const url = entry.callToActionType !== "CALL" && nonEmpty(entry.callToActionUrl) ? ` ${entry.callToActionUrl}` : "";
+    parts.push(`button ${entry.callToActionType}${url}`);
+  }
+  if (nonEmpty(entry.offerCouponCode)) parts.push(`code ${entry.offerCouponCode}`);
+  if (nonEmpty(entry.offerRedeemUrl)) parts.push(`redeem at ${entry.offerRedeemUrl}`);
+  if (nonEmpty(entry.offerTerms)) parts.push(`terms "${entry.offerTerms}"`);
+  return `Google Business Profile: ${parts.join(", ")}`;
+}
+
 function settingLines(params: Record<string, unknown>): string[] {
   const lines: string[] = [];
   for (const entry of configEntries(params, "tiktokConfigs")) {
@@ -294,22 +357,9 @@ function settingLines(params: Record<string, unknown>): string[] {
       `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
     );
   }
-  for (const entry of configEntries(params, "instagramConfigs")) {
-    lines.push(
-      `Instagram: ${String(entry.postType ?? "FEED")}${
-        entry.trialGraduation === "MANUAL"
-          ? ", trial reel you share to followers yourself"
-          : entry.trialGraduation === "SS_PERFORMANCE"
-            ? ", trial reel Instagram shares if it performs well"
-            : ""
-      }`,
-    );
-  }
-  for (const entry of configEntries(params, "facebookConfigs")) {
-    lines.push(
-      `Facebook: ${String(entry.postType ?? "FEED")}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
-    );
-  }
+  for (const entry of configEntries(params, "instagramConfigs")) lines.push(instagramLine(entry));
+  for (const entry of configEntries(params, "facebookConfigs")) lines.push(facebookLine(entry));
+  for (const entry of configEntries(params, "googleBusinessConfigs")) lines.push(googleBusinessLine(entry));
   for (const entry of configEntries(params, "linkedinConfigs")) {
     if (nonEmpty(entry.documentTitle)) lines.push(`LinkedIn: document title "${entry.documentTitle}"`);
   }
@@ -318,10 +368,29 @@ function settingLines(params: Record<string, unknown>): string[] {
       `Pinterest: board ${String(entry.boardId)}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`,
     );
   }
+  if (params.twitterKeepLinks === true && stringArray(params.platforms).includes("TWITTER")) {
+    lines.push("X: links stay clickable, costing 20 credits instead of 2");
+  }
+  for (const entry of configEntries(params, "platformAspectRatios")) {
+    lines.push(`${platformLabel(entry.platform)} images: ${String(entry.aspectRatio)}, ${entry.fit === "PAD" ? "padded" : "cropped"}`);
+  }
+  for (const entry of configEntries(params, "platformThumbnails")) {
+    const thumbnail = nonEmpty(entry.thumbnailUrl)
+      ? fileName(entry.thumbnailUrl)
+      : `frame at ${String(entry.thumbnailTimestampMs)} ms`;
+    lines.push(`${platformLabel(entry.platform)} thumbnail: ${thumbnail}`);
+  }
   return lines;
 }
 
+function firstCommentLines(params: Record<string, unknown>): string[] {
+  return configEntries(params, "firstComments").map(
+    (entry) => `${platformLabel(entry.platform)} first comment: "${String(entry.text ?? "")}"`,
+  );
+}
+
 function fileName(url: string): string {
+  if (url.startsWith("data:")) return "an image sent inline";
   try {
     return decodeURIComponent(new URL(url).pathname.split("/").pop() || url);
   } catch {
@@ -421,6 +490,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
     ...(altTextCount ? [`Alt text on ${altTextCount} of ${media.length} images`] : []),
     ...(nonEmpty(params.thumbnailUrl) ? [`Thumbnail: ${fileName(params.thumbnailUrl)}`] : []),
     ...textLines(params),
+    ...firstCommentLines(params),
   ];
 
   return {
@@ -474,11 +544,24 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.youtubePrivacyStatus,
     entry.instagramPostType,
     entry.facebookPostType,
+    entry.googleBusinessTopicType,
     nonEmpty(entry.pinterestBoardId) ? `board ${entry.pinterestBoardId}` : undefined,
+    stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
+    nonEmpty(entry.instagramAudioId)
+      ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`
+      : undefined,
+    nonEmpty(entry.googleBusinessCallToActionType)
+      ? `button ${entry.googleBusinessCallToActionType}${nonEmpty(entry.googleBusinessCallToActionUrl) && entry.googleBusinessCallToActionType !== "CALL" ? ` ${entry.googleBusinessCallToActionUrl}` : ""}`
+      : undefined,
+    entry.twitterKeepLinks === true ? "links stay clickable" : undefined,
   ].filter(nonEmpty);
-  const titles = [entry.tiktokTitle, entry.youtubeVideoTitle, entry.facebookVideoTitle, entry.pinterestTitle].filter(
-    nonEmpty,
-  );
+  const titles = [
+    entry.tiktokTitle,
+    entry.youtubeVideoTitle,
+    entry.facebookVideoTitle,
+    entry.pinterestTitle,
+    entry.googleBusinessEventTitle,
+  ].filter(nonEmpty);
   const media = stringArray(entry.mediaUrls).map(fileName);
   const text = nonEmpty(entry.text) ? entry.text : fallbackText;
   return [
@@ -487,6 +570,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     ...(nonEmpty(entry.pinterestLink) ? [`  Link: ${entry.pinterestLink}`] : []),
     ...(media.length ? [`  Media: ${media.join(", ")}`] : []),
     `  Text: ${nonEmpty(text) ? `"${text}"` : "(none)"}`,
+    ...(nonEmpty(entry.firstComment) ? [`  First comment: "${entry.firstComment}"`] : []),
   ];
 }
 

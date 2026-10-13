@@ -28,6 +28,7 @@ Which permission each endpoint needs:
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
+| `GET /social-accounts/:id/instagram-audio` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
@@ -70,7 +71,7 @@ List all connected social media accounts for the account group tied to this API 
 }
 ```
 
-Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`
+Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`
 
 **Notes:**
 
@@ -79,6 +80,9 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 - LinkedIn and YouTube accounts may have empty `username`
 - Bluesky `username` is the handle (e.g., `user.bsky.social`)
 - Mastodon `username` is the full handle with the server (e.g., `user@mastodon.social`)
+- Google Business Profile accounts (`GOOGLE_BUSINESS`) are business locations: `displayName` is the location title and `username` is empty. Pass the `id` in `googleBusinessConnectionIds`
+- Instagram accounts carry `supportsInstagramAudio`: `true` when the account was connected through Facebook, which adding Instagram audio to Reels needs
+- Telegram chats are not listed. Telegram posts can only be created in the AdaptlyPost app
 - `status` is `active` or `unauthorized`. An unauthorized account stays listed but the platform rejected its token (a locked Facebook profile, a security checkpoint, a page the user lost access to). `POST /social-posts` refuses it with a 400 until the user reconnects it in the dashboard, so skip it when scheduling and tell the user to reconnect. `unauthorizedReason` is the platform's own message. Registered webhooks receive `account.unauthorized` the moment this happens
 
 ### POST /social-accounts/:id/check
@@ -101,9 +105,44 @@ Asks Facebook whether the page token still works, right now. Pages are also chec
 
 A rejected token marks the page `unauthorized` and fires `account.unauthorized`; a working token clears an earlier mark. Use it before a scheduling run when the user has just reconnected, or when a post failed with a token error and you want to confirm the page is back.
 
+### GET /social-accounts/:id/instagram-audio
+
+Search Instagram music and original sounds to add to a Reel. `:id` is the Instagram account `id` from `/social-accounts`, and the account needs `supportsInstagramAudio: true`.
+
+**Query parameters:**
+
+- `audioType` (string, required): `music` or `original_sound`
+- `searchQuery` (string, optional): Keyword filter, max 100 characters. Leave it out for trending audio
+
+**Response:**
+
+```json
+{
+  "audio": [
+    {
+      "audioId": "1234567890",
+      "audioType": "music",
+      "title": "Summer Nights",
+      "displayArtist": "The Band",
+      "durationMs": 184000,
+      "coverArtworkUrl": "https://...",
+      "previewUrl": "https://...",
+      "instagramUrl": "https://www.instagram.com/reels/audio/1234567890/",
+      "isAdsEligible": true
+    }
+  ]
+}
+```
+
+`displayArtist` is set for music and `igUsername` for original sounds; original sounds also carry `profilePictureUrl`. `previewUrl` expires after about 1.5 days. Only audio Meta cleared for third-party publishing comes back, which can differ from what the Instagram app shows. Pass the chosen `audioId` in `instagramConfigs[].audio` (see [platform-configs.md](platform-configs.md#instagram--instagramconfigs)).
+
+Returns `400` when the account is not connected through Facebook or Instagram rejects the search, and `404` for an unknown account.
+
 ### POST /social-posts
 
 Create or schedule a post to one or more social media platforms.
+
+A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also needs `posts.schedule`, and a post that publishes now also needs `posts.publish`; without it the call answers `403 permission_denied`.
 
 **Request:**
 
@@ -132,17 +171,22 @@ Create or schedule a post to one or more social media platforms.
 
 **Required fields:**
 
-- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
-- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages)
+- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`. `TELEGRAM` is rejected: Telegram posts can only be created in the app
+- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `CAROUSEL` takes 2 or more items in `mediaUrls`, up to 4 on `TWITTER`, `BLUESKY` and `MASTODON`, 5 on `PINTEREST`, 10 on `INSTAGRAM`, `FACEBOOK` and `THREADS`, 20 on `LINKEDIN` and 35 on `TIKTOK` (JPEG or WebP only). `INSTAGRAM` and `THREADS` mix images and videos in one carousel; the others take images only, and `YOUTUBE` has no carousel. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages). `GOOGLE_BUSINESS` takes `TEXT` or `IMAGE` only
 - `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
 **Optional fields:**
 
-- `text` (string): Default post text for all platforms
-- `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`
+- `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it
+- `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`. The LinkedIn mention syntax works here too
 - `mediaUrls` (string[]): Public URLs of uploaded media files
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
-- `thumbnailUrl` (string): Thumbnail URL for video posts
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile and videos ignore it
+- `thumbnailUrl` (string): Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless `platformThumbnails` overrides it
+- `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on `INSTAGRAM`, `PINTEREST` and `TIKTOK` unless `platformThumbnails` overrides it
+- `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
+- `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
+- `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
+- `twitterKeepLinks` (boolean): Keep links in the X text clickable. See [Links on X](#links-on-x)
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
 - `recurrence` (object): Repeats the post. See [Recurrence](#recurrence) below
@@ -156,14 +200,58 @@ Create or schedule a post to one or more social media platforms.
 - `linkedinConnectionIds` (string[]): LinkedIn account connection IDs
 - `pinterestConnectionIds` (string[]): Pinterest account connection IDs
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
+- `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
 - `pinterestConfigs` (array): Pinterest-specific settings per connection
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
 - `youtubeConfigs` (array): YouTube-specific settings per connection
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts)
+- `googleBusinessConfigs` (array): Google Business Profile settings per location: topic (update, event or offer), button, event and offer details
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
+
+#### First comments
+
+`firstComments` posts a comment from the same account right after the post goes out, one entry per platform:
+
+```json
+{ "firstComments": [{ "platform": "LINKEDIN", "text": "Read the full report at example.com/report" }] }
+```
+
+| Platform | Posted as | Max characters |
+| --- | --- | --- |
+| `LINKEDIN` | comment | 1250 |
+| `TWITTER` | reply | 280 |
+| `THREADS` | reply | 500 |
+| `BLUESKY` | reply | 300 |
+| `MASTODON` | reply | 500 |
+| `YOUTUBE` | comment | 10000 |
+
+Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
+
+#### Platform thumbnails
+
+`platformThumbnails` gives one platform of a `VIDEO` post its own thumbnail, one entry per platform: `{ "platform", "thumbnailUrl", "thumbnailTimestampMs" }`. `thumbnailUrl` is an https URL or an image data URI; `thumbnailTimestampMs` is a video frame in ms (integer, 0 or more).
+
+- `YOUTUBE`, `FACEBOOK`, `LINKEDIN`: image only
+- `INSTAGRAM`, `PINTEREST`: image or frame; the image wins when both are sent
+- `TIKTOK`: frame only
+
+A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`. Other platforms, posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use return `400`. On `PATCH`, sending the array replaces every override and leaving it out keeps the stored ones.
+
+#### Image shape per platform
+
+`platformAspectRatios` reframes every image of an `IMAGE` or `CAROUSEL` post to one shape on a platform, one entry per platform: `{ "platform": "INSTAGRAM", "aspectRatio": "PORTRAIT", "fit": "CROP" }`.
+
+- `aspectRatio`: `SQUARE` (1:1), `PORTRAIT` (4:5), `VERTICAL` (9:16), `LANDSCAPE` (1.91:1). `INSTAGRAM` takes `SQUARE`, `PORTRAIT` and `LANDSCAPE`; `TIKTOK` takes all four
+- `fit`: `CROP` (default) cuts the image from the center; `PAD` keeps the whole image and fills the rest with a blurred copy
+
+Other platforms, video posts, Instagram stories and a second entry for one platform return `400`. Leave a platform out to keep its images as uploaded. On `PATCH` it applies to the `mediaUrls` sent in the same request.
+
+#### Links on X
+
+X charges over 10 times more for a post with a link, so by default every link in X text is broken (`example.com` becomes `example. com`). `twitterKeepLinks: true` keeps them clickable. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; `true` on any other plan returns `400`. It is ignored when the X text has no link. `POST /social-posts` and `PATCH` take it; bulk does not.
 
 #### Recurrence
 
@@ -177,8 +265,8 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 }
 ```
 
-- `frequency` (string, required): `DAILY`, `WEEKLY` or `MONTHLY`
-- `interval` (integer): Repeat every N days, weeks or months. Range: 1-30. Default: 1
+- `frequency` (string, required): `DAILY`, `WEEKLY`, `MONTHLY` or `YEARLY`. `YEARLY` comes back on the same date every year at the same local time; a series started on February 29 posts on February 28 in other years
+- `interval` (integer): Repeat every N days, weeks, months or years. Range: 1-30. Default: 1
 - `weekdays` (Weekday[]): `WEEKLY` only. The weekday of `scheduledAt` is always included
 - `endsOn` (string): `YYYY-MM-DD`, the last day an occurrence may go out on (inclusive). Must be on or after the day of the first post
 - `maxOccurrences` (integer): Total number of posts the series publishes. Range: 2-365
@@ -278,9 +366,23 @@ GET /social-posts?limit=10&offset=0&statuses=SCHEDULED&statuses=PUBLISHING&platf
 **Post status values:** `DRAFT`, `SCHEDULED`, `PENDING`, `PUBLISHING`, `COMPLETED`, `PARTIAL_FAILURE`, `FAILED`
 **Platform status values:** `PENDING`, `PUBLISHING`, `PUBLISHED`, `FAILED`
 
-The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set (every platform except Mastodon). `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
+The post carries its `mediaUrls` at the top level as well as on each platform entry. Once a platform entry is published, `platformPostId` and a clickable `postUrl` are set on every platform. Instagram and Facebook stories expire after 24 hours, so their `postUrl` links to the profile or page. `previewUrls` holds one permanent preview image per media item (WebP, up to 720px, a still frame for videos), filled in shortly after publishing starts; an empty string means that item could not be rendered. After publishing, `mediaUrls` may be replaced by the platform's own CDN links, which expire within days, and the uploaded source files are removed, so display `previewUrls`.
 
 `recurringPostId` names the recurring post this post is an occurrence of, and `occurrenceAt` is the series slot it fills, which stays the same when the post is rescheduled. Both are `null` on posts that are not part of a series.
+
+`TELEGRAM` platform entries appear on posts created in the app. The API reads them but cannot create them.
+
+Platform entry fields set by the newer request fields (absent when not used):
+
+- First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`
+- Thumbnail override: `thumbnailUrl`, `thumbnailTimestampMs`
+- Image shape: `mediaAspectRatio`, `mediaAspectRatioFit`
+- Instagram: `instagramCollaborators`, `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
+- Facebook: `facebookTextFormatPresetId`
+- X: `twitterKeepLinks`
+- Google Business Profile: `googleBusinessTopicType`, `googleBusinessCallToActionType`, `googleBusinessCallToActionUrl`, `googleBusinessEventTitle`, `googleBusinessEventStart`, `googleBusinessEventEnd`, `googleBusinessOfferCouponCode`, `googleBusinessOfferRedeemUrl`, `googleBusinessOfferTerms`
+
+A story shared next to a feed post or reel (`shareToStory`) is its own platform entry with `instagramPostType` or `facebookPostType` set to `STORY`.
 
 ### GET /social-posts/:id
 
@@ -339,8 +441,10 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 
 **Optional fields (batch-level):**
 
-- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `pageIds`
-- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`
+- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `pageIds`
+- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`
+
+`firstComments`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`.
 
 See [platform-configs.md](platform-configs.md) for config schemas.
 
@@ -354,7 +458,8 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
-- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs` — when set on a post item, these override the batch-level configs for that specific post
+- `firstComments`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
+- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 **Response:**
 
@@ -457,7 +562,7 @@ Update a `DRAFT` or `SCHEDULED` post. Any other status is rejected with `400` `C
 
 Moving a `SCHEDULED` post's `scheduledAt` more than a minute into the past returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time the post already has is accepted even after it passed. To publish now, use `POST /social-posts/:id/publish` without `scheduledAt`.
 
-Accepts the same body as `POST /social-posts`, minus `saveAsDraft`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, and `thumbnailTimestampMs` you omit keep their values. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
+Accepts the same body as `POST /social-posts`, minus `saveAsDraft` and `recurrence`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments` and `platformThumbnails` you omit keep their values. Sending `firstComments` or `platformThumbnails` replaces every stored entry. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
 
@@ -485,7 +590,7 @@ Publish a draft, either immediately or on a schedule. Accepts a `DRAFT`, and als
 { "scheduledAt": "2026-03-15T10:00:00Z", "timezone": "UTC" }
 ```
 
-Omit `scheduledAt` (or pass a past time) to publish now: the post moves to `PENDING`, a publishing job is queued per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. A future `scheduledAt` sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
+A future `scheduledAt` needs `posts.schedule` and publishing now needs `posts.publish`, so a key that holds only `posts.draft` gets `403 permission_denied`. Omit `scheduledAt` (or pass a past time) to publish now: the post moves to `PENDING`, a publishing job is queued per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. A future `scheduledAt` sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
 
 **Response:** `{ "postId", "queuedPlatforms", "isScheduled", "scheduledAt" }`. Read `GET /social-posts/:id/results` afterwards for the per-platform outcome.
 
@@ -643,7 +748,7 @@ Rather than polling `GET /social-posts` to find out whether something published,
 | `image.completed` | An AI image job finished; `data.image` carries `jobId`, `sessionId`, `prompt`, `imageUrl` and `imageId` |
 | `image.failed` | An AI image job failed; `data.image` carries `jobId`, `sessionId`, `prompt` and `error` |
 
-Every webhook receives every event: there is no per-event subscription. Post events carry `data.post`, account events `data.account`, image events `data.image`.
+Every webhook receives every event: there is no per-event subscription. Post events carry `data.post`, account events `data.account`, image events `data.image`. `data.post` has the same shape as `GET /social-posts/:id`, so it carries every platform entry field, first comments and Google Business Profile settings included.
 
 ### POST /api/v1/webhooks
 
@@ -662,7 +767,7 @@ Every webhook receives every event: there is no per-event subscription. Post eve
 
 > The signing secret is returned **only here, only once**. It is not in `GET /webhooks` or `GET /webhooks/:id`. Store it when you create the webhook or delete it and make a new one.
 
-Maximum 10 webhooks per account group.
+Maximum 10 webhooks per account group. The URL must reach a public host: deliveries to a private or internal address are refused and the delivery records an error.
 
 ### GET /api/v1/webhooks
 
@@ -712,7 +817,9 @@ AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per atte
 
 ## Analytics
 
-Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`. `TWITTER` and `MASTODON` are ignored by every filter (X bills per post read, and Mastodon has no analytics yet), and `LINKEDIN` returns no data until LinkedIn approves the analytics products. Data reaches back 180 days at most, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far.
+Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`, `TWITTER`, `LINKEDIN`, `GOOGLE_BUSINESS`. `GOOGLE_BUSINESS` reports only location-level impressions (how often the location was seen); its posts are listed with every per-post metric `null`. `MASTODON` and `TELEGRAM` have no analytics and are ignored by every filter.
+
+Connecting an account imports its posts from the last 180 days, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far. Analytics are kept from then on while the account stays connected, so any date range in that history can be queried. A post keeps refreshing for 180 days after it is published, then holds its last numbers. Weekly buckets and day boundaries follow the workspace defaults.
 
 Every window endpoint takes:
 
@@ -885,7 +992,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 ## Enums
 
 **PlatformType:**
-`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`
+`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM` (read only: posts and filters, never a post target)
 
 **ContentType:**
 `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, `DOCUMENT`
@@ -895,6 +1002,24 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 
 **MetaVideoPostType (Instagram & Facebook):**
 `FEED`, `REEL`, `STORY`
+
+**GoogleBusinessTopicType:**
+`STANDARD`, `EVENT`, `OFFER`
+
+**GoogleBusinessCallToActionType:**
+`BOOK`, `ORDER`, `SHOP`, `LEARN_MORE`, `SIGN_UP`, `CALL`
+
+**MediaAspectRatio:**
+`SQUARE`, `PORTRAIT`, `VERTICAL`, `LANDSCAPE`
+
+**MediaAspectRatioFit:**
+`CROP`, `PAD`
+
+**FirstCommentStatus:**
+`PENDING`, `PUBLISHED`, `FAILED`
+
+**InstagramAudioType:**
+`music`, `original_sound`
 
 **YouTubePostType:**
 `VIDEO`, `SHORTS`
@@ -906,7 +1031,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 `youtube`, `creativeCommon`
 
 **RecurrenceFrequency:**
-`DAILY`, `WEEKLY`, `MONTHLY`
+`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`
 
 **Weekday:**
 `MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`, `FRIDAY`, `SATURDAY`, `SUNDAY`
