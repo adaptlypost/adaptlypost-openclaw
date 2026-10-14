@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.14.0
+version: 1.15.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -335,7 +335,7 @@ curl -X POST   .../social-posts/POST_ID/unschedule
 curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
 ```
 
-`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
+`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId` or `boardName`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
 
 Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time it already has is fine, even once that time has passed. To publish it now, call `/publish` without `scheduledAt`.
 
@@ -455,7 +455,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
-| **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`; without it the pin goes to a public "AdaptlyPost" board), `title`, `link` |
+| **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`) or `boardName` (the board's name on that account), never both; with neither the pin goes to a public "AdaptlyPost" board. `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
 | **X (Twitter)** | — | No config object, uses `twitterConnectionIds`; top-level `twitterKeepLinks` keeps links clickable |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds` only |
@@ -538,7 +538,15 @@ Volumes are 1 to 100 and default to 100. `title` and `artist` are stored for dis
 
 ### Pinterest boards
 
-A pin goes to one board. List the boards of the Pinterest account you post to, ask the user which one to use unless they already named it, and pass its `id` as `boardId`:
+A pin goes to one board. When the user named the board, pass that name as `boardName` and skip the lookup:
+
+```json
+"pinterestConfigs": [{ "connectionId": "PINTEREST_ID", "boardName": "Summer recipes", "title": "Pin title" }]
+```
+
+AdaptlyPost looks the name up among the boards of that config's Pinterest account when the request is handled: names are trimmed, a single exact match wins, and otherwise a single case-insensitive match wins. It never falls back to another board. A name that matches no board returns `400` `No board named "X" on this Pinterest account. ...`, and a name several boards share returns `400` naming their ids, so pick one with the user and send it as `boardId`. Send `boardId` or `boardName`, never both in one config (`400`). In bulk, an item whose name does not resolve fails alone. `boardName` is not stored: the post keeps the resolved board id.
+
+Otherwise list the boards of the Pinterest account you post to, ask the user which one to use, and pass its `id` as `boardId`:
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
@@ -551,7 +559,7 @@ Returns `{ "boards": [{ "id", "name", "description", "privacy", "pinCount" }] }`
 "pinterestConfigs": [{ "connectionId": "PINTEREST_ID", "boardId": "BOARD_ID", "title": "Pin title", "link": "https://example.com/page" }]
 ```
 
-Without `boardId` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed. Leave it out only when the user is happy with that board.
+Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed. Leave both out only when the user is happy with that board.
 
 ### Per-platform extras
 
@@ -630,7 +638,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - `TELEGRAM` shows up on posts made in the app, but the API cannot post to Telegram. Never put it in `platforms`.
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
-- For a Pinterest post, list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Leave `boardId` out only when the user is happy with the default "AdaptlyPost" board.
+- For a Pinterest post, pass the board the user named as `boardName`. Otherwise list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Never send both. Leave both out only when the user is happy with the default "AdaptlyPost" board.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - A recurring post repeats the same text, which X and LinkedIn reject as a duplicate. Put spintax such as `{Hi|Hello}` in the text so each post differs.

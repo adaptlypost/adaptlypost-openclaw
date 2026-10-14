@@ -352,7 +352,11 @@ function pinterestLines(params: Record<string, unknown>): string[] {
   const configs = configEntries(params, "pinterestConfigs");
   return stringArray(params.pinterestConnectionIds).map((connectionId) => {
     const entry = configs.find((config) => config.connectionId === connectionId) ?? {};
-    const board = nonEmpty(entry.boardId) ? `board ${entry.boardId}` : DEFAULT_PINTEREST_BOARD;
+    const board = nonEmpty(entry.boardName)
+      ? `board "${entry.boardName}"`
+      : nonEmpty(entry.boardId)
+        ? `board ${entry.boardId}`
+        : DEFAULT_PINTEREST_BOARD;
     return `Pinterest: ${board}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`;
   });
 }

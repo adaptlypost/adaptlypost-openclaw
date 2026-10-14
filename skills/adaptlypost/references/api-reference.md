@@ -158,7 +158,7 @@ List the boards a Pinterest account can pin to, secret boards included. `:id` is
 }
 ```
 
-`id` and `name` are always set; `description`, `privacy` and `pinCount` are optional. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. Pass the chosen `id` as `pinterestConfigs[].boardId` (see [platform-configs.md](platform-configs.md#pinterest--pinterestconfigs)).
+`id` and `name` are always set; `description`, `privacy` and `pinCount` are optional. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. Pass the chosen `id` as `pinterestConfigs[].boardId`, or skip this call and pass the name the user gave as `pinterestConfigs[].boardName` (see [platform-configs.md](platform-configs.md#pinterest--pinterestconfigs)).
 
 Returns `404` when the account is not found or is not a Pinterest account in this workspace, and `400` when Pinterest refuses the request, usually because the account must be reconnected.
 
@@ -225,7 +225,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 - `pinterestConnectionIds` (string[]): Pinterest account connection IDs
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
 - `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
-- `pinterestConfigs` (array): Pinterest-specific settings per connection. `boardId` is optional; without it the pin goes to a public board named "AdaptlyPost"
+- `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost"
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
@@ -484,6 +484,8 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
 - Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs` — when set on a post item, these override the batch-level configs for that specific post
+
+A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
 
 **Response:**
 

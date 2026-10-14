@@ -206,7 +206,8 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `connectionId` | string | **yes** | Pinterest account connection ID |
-| `boardId` | string | no | Board `id` from `GET /social-accounts/:id/pinterest-boards`. Without it the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed |
+| `boardId` | string | no | Board `id` from `GET /social-accounts/:id/pinterest-boards`. Not together with `boardName`. Without either, the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed |
+| `boardName` | string | no | The board's name on this Pinterest account (1 to 180 characters), used instead of `boardId`. Names are trimmed; a single exact match wins, then a single case-insensitive match. `400` when no board has the name, when several share it (the message lists their ids), or when `boardId` is also set. Never falls back to another board. Not stored: the post keeps the resolved board id |
 | `title` | string | no | Pin title (max 100 chars) |
 | `link` | string | no | Destination URL when pin is clicked (must be valid URL) |
 

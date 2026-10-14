@@ -140,11 +140,14 @@ belongs in `linkedinConnectionIds`. Facebook is the exception: pages have no
 username, so they carry a `pageId` and go in `pageIds`.
 
 TikTok needs `privacyLevel` in `tiktokConfigs` and has no default; the post is
-rejected outright without it. For Pinterest, find a board with
-`adaptlypost_list_pinterest_boards` and pass its `id` as `boardId` in
-`pinterestConfigs`. A board belongs to one Pinterest account. Without a
-`boardId` the pin goes to a public board named "AdaptlyPost", created on the
-account the first time it is needed, and the approval prompt says so.
+rejected outright without it. For Pinterest, pass the board the user named as
+`boardName` in `pinterestConfigs`; AdaptlyPost finds it among that account's
+boards and answers 400 when no board or several boards have that name. Or find
+a board with `adaptlypost_list_pinterest_boards` and pass its `id` as
+`boardId`. Send one or the other, not both. A board belongs to one Pinterest
+account. With neither, the pin goes to a public board named "AdaptlyPost",
+created on the account the first time it is needed, and the approval prompt
+says so.
 
 Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500
