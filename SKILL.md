@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.15.0
+version: 1.16.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -451,7 +451,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
 | **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
-| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `audio` (Reels) |
+| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `aiGenerated` (AI info label), `audio` (Reels) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
@@ -571,6 +571,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `twitterKeepLinks: true`: keeps links in X text clickable. By default every link in X text is broken (`example.com` becomes `example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; any other plan gets `400`. `POST /social-posts` and `PATCH` only, not bulk.
 - `instagramConfigs[].shareToStory` and `facebookConfigs[].shareToStory`: also publish the same media as a story next to the feed post or reel. The story is its own entry in `platforms` with `postType: STORY` and succeeds, fails and retries on its own. It skips the caption and first comment, and a story video must be 60 seconds or shorter.
 - `instagramConfigs[].collaborators`: up to 3 Instagram usernames invited as collaborators on a feed image, carousel or reel. Each has to accept the invite in Instagram.
+- `instagramConfigs[].aiGenerated: true`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too.
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
 - LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
 

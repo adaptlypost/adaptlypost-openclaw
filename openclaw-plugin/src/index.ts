@@ -214,6 +214,12 @@ const PlatformConfigFields = {
               "Up to 3 Instagram usernames invited as collaborators. Feed images, carousels and reels only; a story or trial reel with collaborators is a 400. Each collaborator must accept the invite in Instagram before the post shows on their profile.",
           }),
         ),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              'Disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with shareToStory carries the label too.',
+          }),
+        ),
         audio: Type.Optional(
           Type.Object(
             {

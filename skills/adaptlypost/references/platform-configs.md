@@ -70,6 +70,7 @@ For bulk scheduling, configs can be set at two levels:
 | `trialGraduation` | string | no | Publish the reel as a trial reel. `MANUAL`: you share it to followers from the Instagram app. `SS_PERFORMANCE`: Instagram shares it if it performs well |
 | `shareToStory` | boolean | no | Also publish the same media as a story next to the `FEED` or `REEL` post. Ignored when `postType` is `STORY` |
 | `collaborators` | string[] | no | Up to 3 Instagram usernames invited as collaborators. A leading `@` is stripped and duplicates are dropped |
+| `aiGenerated` | boolean | no | Disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too |
 | `audio` | object | no | Music or an original sound added to a Reel. See [Audio](#audio) |
 
 **Content types:**

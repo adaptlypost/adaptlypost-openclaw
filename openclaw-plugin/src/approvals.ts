@@ -315,6 +315,7 @@ function instagramLine(entry: ConfigEntry): string {
   if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
   const collaborators = handles(entry.collaborators);
   if (collaborators) parts.push(`collaborators ${collaborators}`);
+  if (entry.aiGenerated === true) parts.push("AI info label");
   const audio = audioLabel(entry.audio);
   if (audio) parts.push(audio);
   return `Instagram: ${parts.join(", ")}`;
@@ -563,6 +564,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
         ? DEFAULT_PINTEREST_BOARD
         : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
+    entry.instagramAiGenerated === true ? "AI info label" : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`
       : undefined,
