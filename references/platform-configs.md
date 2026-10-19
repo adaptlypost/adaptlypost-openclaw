@@ -131,6 +131,8 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `videoTitle` | string | no | Video title (max 255 chars) |
 | `shareToStory` | boolean | no | Also publish the same media as a story next to the `FEED` or `REEL` post. Ignored when `postType` is `STORY` |
 | `textFormatPresetId` | string | no | Facebook's id for a colored text background (digits, 1-20), for example `106018623298955` (solid purple) or `249307305544279` (red to blue gradient) |
+| `imageLayout` | string | no | `GRID` (photo grid) or `CAROUSEL` (swipeable cards, each opening its own link). Default: `GRID` |
+| `carouselCards` | array | no | Up to 5 cards, one per image in the same order as `mediaUrls`: `link` (**required**, http or https URL, max 2048 chars), `title` (max 100 chars), `description` (max 200 chars). Only read when `imageLayout` is `CAROUSEL` |
 
 **Content types:**
 
@@ -141,6 +143,8 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 **Share to story:** the story is its own entry in the post's `platforms` with `postType: STORY`. It skips the caption, video title and text background, needs `IMAGE`, `VIDEO` or `CAROUSEL`, and a story video must be 60 seconds or shorter.
 
 **Text background:** only for `contentType: TEXT` with no media and text up to 130 characters; anything else returns `400`. Links in the text show without a preview. If Facebook refuses the background, the post goes out as plain text.
+
+**Link carousel:** `imageLayout: CAROUSEL` needs `postType: FEED`, 2 to 5 images, no videos and one `carouselCards` entry per image; anything else returns `400`. Facebook shows a card's image and title only when its link goes to a website the Page owns. Any other link makes the post fail with a message saying so. Posts that leave out `imageLayout` get a photo grid.
 
 **Media notes:**
 

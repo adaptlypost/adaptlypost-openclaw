@@ -274,6 +274,26 @@ const PlatformConfigFields = {
               "Facebook's id for a colored text background, for example 106018623298955 (solid purple) or 249307305544279 (red to blue gradient). Only for contentType TEXT with no media and text up to 130 characters. Links show without a preview. If Facebook refuses the background, the post goes out as plain text.",
           }),
         ),
+        imageLayout: Type.Optional(
+          Type.Union([Type.Literal("GRID"), Type.Literal("CAROUSEL")], {
+            description:
+              "GRID (default) posts the images as a photo grid. CAROUSEL posts swipeable cards, each opening its own link from carouselCards. A carousel needs postType FEED, 2 to 5 images, no videos and one card per image; otherwise the API answers 400.",
+          }),
+        ),
+        carouselCards: Type.Optional(
+          Type.Array(
+            Type.Object({
+              link: Type.String({ maxLength: 2048, description: "http or https URL the card opens." }),
+              title: Type.Optional(Type.String({ maxLength: 100 })),
+              description: Type.Optional(Type.String({ maxLength: 200 })),
+            }),
+            {
+              maxItems: 5,
+              description:
+                "One card per image, in the same order as mediaUrls. Only read when imageLayout is CAROUSEL. Facebook shows the card image and title only for links to a website the Page owns; any other link makes the post fail with a message saying so.",
+            },
+          ),
+        ),
       }),
       {
         description:

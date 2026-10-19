@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.16.0
+version: 1.17.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -452,7 +452,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | --- | --- | --- |
 | **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
 | **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `aiGenerated` (AI info label), `audio` (Reels) |
-| **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background) |
+| **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background), `imageLayout` and `carouselCards` (link carousel) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`) or `boardName` (the board's name on that account), never both; with neither the pin goes to a public "AdaptlyPost" board. `title`, `link` |
@@ -573,6 +573,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `instagramConfigs[].collaborators`: up to 3 Instagram usernames invited as collaborators on a feed image, carousel or reel. Each has to accept the invite in Instagram.
 - `instagramConfigs[].aiGenerated: true`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too.
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
+- `facebookConfigs[].imageLayout: "CAROUSEL"` with `carouselCards`: swipeable cards instead of a photo grid, each opening its own link. Send one card per image, in the same order as `mediaUrls`: `{ "link": "https://example.com/a", "title": "Shoes", "description": "New in" }` (`link` required, `title` max 100, `description` max 200). Needs 2 to 5 images, no videos and `postType: FEED`, or the API returns `400`. Facebook shows the card image and title only for links to a website the Page owns; any other link makes the post fail with a message saying so. Leave `imageLayout` out for the usual photo grid.
 - LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
 
 ## Supported File Types for Upload

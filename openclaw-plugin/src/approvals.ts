@@ -327,7 +327,14 @@ function facebookLine(entry: ConfigEntry): string {
   if (nonEmpty(entry.videoTitle)) parts.push(`title "${entry.videoTitle}"`);
   if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
   if (nonEmpty(entry.textFormatPresetId)) parts.push(`colored background ${entry.textFormatPresetId}`);
+  if (entry.imageLayout === "CAROUSEL") parts.push(carouselLabel(entry.carouselCards));
   return `Facebook: ${parts.join(", ")}`;
+}
+
+function carouselLabel(value: unknown): string {
+  const cards = Array.isArray(value) ? (value as ConfigEntry[]) : [];
+  const links = cards.map((card, index) => `card ${index + 1} ${String(card.link ?? "(no link)")}`);
+  return `link carousel${links.length ? `: ${links.join(", ")}` : " with no cards"}`;
 }
 
 function googleBusinessLine(entry: ConfigEntry): string {
@@ -565,6 +572,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
         : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
+    entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`
       : undefined,
