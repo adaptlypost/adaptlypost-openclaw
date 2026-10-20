@@ -18,6 +18,7 @@ export const UNSCHEDULE_TOOL = "adaptlypost_unschedule_post";
 export const PAUSE_RECURRING_TOOL = "adaptlypost_pause_recurring_post";
 export const RESUME_RECURRING_TOOL = "adaptlypost_resume_recurring_post";
 export const DELETE_RECURRING_TOOL = "adaptlypost_delete_recurring_post";
+export const REMOVE_ACCOUNT_TOOL = "adaptlypost_remove_account";
 export const GATED_TOOLS = [
   UPLOAD_TOOL,
   CREATE_POST_TOOL,
@@ -26,6 +27,7 @@ export const GATED_TOOLS = [
   PAUSE_RECURRING_TOOL,
   RESUME_RECURRING_TOOL,
   DELETE_RECURRING_TOOL,
+  REMOVE_ACCOUNT_TOOL,
 ] as const;
 
 export const APPROVAL_TIMEOUT_MS = 300_000;
@@ -809,6 +811,50 @@ async function describeSeriesChange(
   };
 }
 
+type ConnectedAccount = {
+  id: string;
+  platform: string;
+  displayName?: string;
+  username?: string;
+  pageId?: string;
+  status?: string;
+};
+
+async function describeAccountRemoval(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const accountId = String(params.account_id ?? "");
+  const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const me = await keyCapabilities(cfg, signal);
+  if (me && Array.isArray(me.permissions) && !me.permissions.includes("accounts.manage")) {
+    throw new Error(
+      `${roleHolder(me)} cannot disconnect accounts, so AdaptlyPost would refuse with 403 permission_denied. Nothing was changed. Tell the user a workspace Admin has to remove it on the Connectors page in the AdaptlyPost app, or give the agent an Admin key.`,
+    );
+  }
+  const { accounts } = (await callApi(cfg, "GET", "/social-accounts", { signal }).catch((error: unknown) => {
+    throw lookupFailed("the connected accounts", error);
+  })) as { accounts: ConnectedAccount[] };
+  const account = accounts.find((candidate) => candidate.id === accountId || candidate.pageId === accountId);
+  if (!account) {
+    throw new Error(
+      `No account with id ${accountId} is connected to this workspace, so nothing was removed. Call adaptlypost_accounts for the current ids.`,
+    );
+  }
+
+  const platform = PLATFORM_LABELS[account.platform] ?? account.platform;
+  const name = nonEmpty(account.displayName) ? account.displayName : nonEmpty(account.username) ? account.username : account.id;
+  const lines = [
+    `Disconnects ${platform} ${name} from the workspace and deletes its stored login. Pending and recurring posts stop publishing to it. Posts already published stay up. Bringing it back means connecting it again in the AdaptlyPost app.`,
+    ...(account.platform === "FACEBOOK" ? ["Only this page goes; other pages from the same Facebook login stay connected."] : []),
+    ...(account.status ? [`Status: ${account.status}`] : []),
+  ];
+
+  return {
+    title: "Remove a connected account",
+    description: lines.join("\n").slice(0, DESCRIPTION_LIMIT),
+    severity: "critical",
+    scope: { kind: "external-post", target: platform, visibility: "restricted" },
+  };
+}
+
 export async function describeApproval(
   cfg: PluginConfig,
   toolName: string,
@@ -827,6 +873,8 @@ export async function describeApproval(
     case RESUME_RECURRING_TOOL:
     case DELETE_RECURRING_TOOL:
       return describeSeriesChange(cfg, toolName, params);
+    case REMOVE_ACCOUNT_TOOL:
+      return describeAccountRemoval(cfg, params);
     default:
       return undefined;
   }

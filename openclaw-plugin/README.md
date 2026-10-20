@@ -111,6 +111,7 @@ OpenClaw's plugin permission requests docs.
 |---|---|
 | `adaptlypost_accounts` | List connected accounts and their connection ids, with `status` (`active` or `unauthorized`). Call this first. |
 | `adaptlypost_check_account` | Ask Facebook right now whether a page's token still works and return its fresh status. Use after the user reconnects a page. |
+| `adaptlypost_remove_account` | Disconnect an account from the workspace, unauthorized ones included. Admin keys only. Needs approval. |
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
@@ -127,7 +128,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Seventeen tools, fewer than the MCP server exposes. Post editing, deletion,
+Eighteen tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the

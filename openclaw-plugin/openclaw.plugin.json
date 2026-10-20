@@ -27,6 +27,7 @@
     "tools": [
       "adaptlypost_accounts",
       "adaptlypost_check_account",
+      "adaptlypost_remove_account",
       "adaptlypost_search_instagram_audio",
       "adaptlypost_list_pinterest_boards",
       "adaptlypost_upload_media",
@@ -56,6 +57,16 @@
       ]
     },
     "adaptlypost_check_account": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_remove_account": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",

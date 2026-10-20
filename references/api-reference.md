@@ -29,7 +29,7 @@ Which permission each endpoint needs:
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
 | `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards` | `posts.draft` | admin, editor, contributor |
-| `POST /social-accounts/:id/check`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
+| `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
 | `GET /analytics/*` | `analytics.read` | all |
@@ -104,6 +104,22 @@ Asks Facebook whether the page token still works, right now. Pages are also chec
 ```
 
 A rejected token marks the page `unauthorized` and fires `account.unauthorized`; a working token clears an earlier mark. Use it before a scheduling run when the user has just reconnected, or when a post failed with a token error and you want to confirm the page is back.
+
+### DELETE /social-accounts/:id
+
+Disconnects the account from the workspace, the same as removing it on the Connectors page: the stored login is deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. It works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. `:id` is the account `id` from `/social-accounts` or the Facebook `pageId`; for Facebook only that page goes, and other pages from the same login stay connected. Returns 404 when the workspace does not hold the account. It cannot be undone, so confirm with the user first.
+
+**Response:**
+
+```json
+{
+  "id": "cmlxmnxn20006hzpzvo291abc",
+  "platform": "FACEBOOK",
+  "displayName": "My Business Page",
+  "pageId": "123456789012345",
+  "removed": true
+}
+```
 
 ### GET /social-accounts/:id/instagram-audio
 

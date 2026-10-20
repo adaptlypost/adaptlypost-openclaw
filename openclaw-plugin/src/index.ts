@@ -17,6 +17,7 @@ import {
   describeApproval,
   GATED_TOOLS,
   PAUSE_RECURRING_TOOL,
+  REMOVE_ACCOUNT_TOOL,
   RESUME_RECURRING_TOOL,
   RETRY_TOOL,
   UNSCHEDULE_TOOL,
@@ -513,6 +514,25 @@ export default definePluginEntry({
           await callApi(cfg(), "POST", `/social-accounts/${encodeURIComponent(accountId)}/check`, {
             signal,
           }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: REMOVE_ACCOUNT_TOOL,
+      label: "AdaptlyPost: remove an account",
+      description:
+        "Disconnect a social account from the token's workspace, the same as removing it on the Connectors page: its stored login is deleted, pending and recurring posts stop publishing to it, and it stops counting toward the plan. Works on unauthorized accounts too, so use it when the user wants a disabled account cleaned up rather than reconnected. For a Facebook page only that page goes; other pages from the same login stay. Irreversible, so every call pauses for the user's approval; bringing the account back means connecting it again in the AdaptlyPost app. Needs an Admin key; other roles are refused before the prompt. Returns { id, platform, displayName, pageId, removed: true }.",
+      parameters: Type.Object({
+        account_id: Type.String({
+          description: "The account id from adaptlypost_accounts (or the Facebook pageId).",
+        }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REMOVE_ACCOUNT_TOOL, params);
+        const { account_id: accountId } = params as { account_id: string };
+        return jsonResult(
+          await callApi(cfg(), "DELETE", `/social-accounts/${encodeURIComponent(accountId)}`, { signal }),
         );
       },
     });
