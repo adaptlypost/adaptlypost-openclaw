@@ -1,0 +1,25 @@
+SKILL.md
+  s_bfaf31728d226c::t_42e815be414c72 5,406-408
+references/api-reference.md
+  s_bfaf31728d226c::t_8e4c06e2e8d3f4 655-678,686-690,694-695
+skills/adaptlypost/SKILL.md
+  s_bfaf31728d226c::t_c60bda48b9862f 5,406-408
+skills/adaptlypost/references/api-reference.md
+  s_bfaf31728d226c::t_71a45caaded25c 655-678,686-690,694-695
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d6f8dd81d66a40eab7237dc4d3e31e8a4062e076",
+  "prompts": {},
+  "sessions": {
+    "s_bfaf31728d226c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec8adf88-87f8-492f-86ff-baeb6a2e8181",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
