@@ -188,6 +188,12 @@ const PlatformConfigFields = {
           Type.Union([Type.Literal("public"), Type.Literal("private"), Type.Literal("unlisted")]),
         ),
         madeForKids: Type.Optional(Type.Boolean()),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              'Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts. Omit it or send false for no label.',
+          }),
+        ),
       }),
       { description: "YouTube uploads without a videoTitle publish under the caption text." },
     ),

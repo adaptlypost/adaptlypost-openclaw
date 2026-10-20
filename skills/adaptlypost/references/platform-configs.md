@@ -166,6 +166,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
       "notifySubscribers": true,
       "allowEmbedding": true,
       "madeForKids": false,
+      "aiGenerated": false,
       "categoryId": "22",
       "playlistId": "PLxxxxxxxx"
     }
@@ -184,6 +185,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `notifySubscribers` | boolean | no | Notify subscribers on publish |
 | `allowEmbedding` | boolean | no | Allow embedding on other sites |
 | `madeForKids` | boolean | no | COPPA compliance flag |
+| `aiGenerated` | boolean | no | Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Sets `status.containsSyntheticMedia`. Omit it or send `false` for no label. Works on videos and Shorts |
 | `categoryId` | string | no | YouTube category ID |
 | `playlistId` | string | no | Add to playlist after publishing |
 

@@ -380,7 +380,7 @@ function settingLines(params: Record<string, unknown>): string[] {
   }
   for (const entry of configEntries(params, "youtubeConfigs")) {
     lines.push(
-      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
+      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${entry.aiGenerated === true ? ", altered or synthetic content label" : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
     );
   }
   for (const entry of configEntries(params, "instagramConfigs")) lines.push(instagramLine(entry));
@@ -574,6 +574,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
         : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
+    entry.youtubeAiGenerated === true ? "altered or synthetic content label" : undefined,
     entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`
