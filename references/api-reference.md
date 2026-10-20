@@ -652,7 +652,30 @@ Get `platformIds` from `GET /social-posts/:id/results`, or name the platform. Re
 
 ### POST /connect-links
 
-Mint a one-time link that lets someone connect a social account to this account group without an AdaptlyPost login of their own. Built for agencies onboarding a client, and for agents that need an account connected but must never handle the credentials.
+Mint a link that lets someone connect social accounts to this account group without an AdaptlyPost login of their own. Built for agencies onboarding a client, and for agents that need an account connected but must never handle the credentials.
+
+Send no body for a quick link: every platform, every account in the group visible to the client, no limit, expiring after 7 days. Every field is optional:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string, up to 80 characters | Label in the dashboard list of links |
+| `visibility` | `PUBLIC` or `PRIVATE` | `PRIVATE` shows the client only the accounts they connected through this link |
+| `allowedPlatforms` | array of platform types | Platforms the client can pick. Omit or send `[]` for every platform |
+| `maxAccounts` | integer, 1 or more | The link stops working once that many accounts are connected through it |
+| `expiresAt` | ISO 8601 date-time with `Z` or an offset | When the link stops working, at least 1 hour and at most 365 days away |
+| `neverExpires` | boolean | `true` keeps the link working until it is revoked. Don't send it with `expiresAt` |
+
+**Request:**
+
+```json
+{
+  "name": "Acme onboarding",
+  "visibility": "PRIVATE",
+  "allowedPlatforms": ["INSTAGRAM", "TIKTOK"],
+  "maxAccounts": 3,
+  "expiresAt": "2026-03-30T18:00:00Z"
+}
+```
 
 **Response:**
 
@@ -660,9 +683,15 @@ Mint a one-time link that lets someone connect a social account to this account 
 {
   "url": "https://adaptlypost.com/connect/abc123",
   "token": "abc123",
-  "expiresAt": "2026-03-16T10:00:00.000Z"
+  "expiresAt": "2026-03-30T18:00:00.000Z",
+  "name": "Acme onboarding",
+  "visibility": "PRIVATE",
+  "allowedPlatforms": ["INSTAGRAM", "TIKTOK"],
+  "maxAccounts": 3
 }
 ```
+
+`expiresAt` is `null` for a link made with `neverExpires: true`. An expiry outside the range, or both `expiresAt` and `neverExpires`, answers `400`.
 
 Send the `url` to the person who owns the account. Anyone holding it can attach an account to your group, so treat it as a secret and revoke it once used.
 

@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.18.0
+version: 1.19.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -403,7 +403,9 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/connect-links \
   -H "Authorization: Bearer $ADAPTLYPOST_API_KEY"
 ```
 
-Returns `{ "url", "token", "expiresAt" }`. Give the `url` to the user who asked for it (Safety rule 8). Anyone holding it can attach an account to this group, so revoke it once used with `DELETE /connect-links/TOKEN`.
+Returns `{ "url", "token", "expiresAt", "name", "visibility", "allowedPlatforms", "maxAccounts" }`. Give the `url` to the user who asked for it (Safety rule 8). Anyone holding it can attach an account to this group, so revoke it once used with `DELETE /connect-links/TOKEN`.
+
+With no body the link offers every platform, shows the client every account in the group, has no limit and expires after 7 days. When the user wants more control, send any of `name`, `visibility: "PRIVATE"` (the client sees only what they connected), `allowedPlatforms`, `maxAccounts`, `expiresAt` (1 hour to 365 days away) or `neverExpires: true`. Only make a link that never expires when the user asks for one. The fields are in `references/api-reference.md`.
 
 Never ask a user for a social platform password. This endpoint exists so you never have to.
 
