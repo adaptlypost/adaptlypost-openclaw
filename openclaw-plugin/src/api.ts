@@ -99,6 +99,7 @@ export async function callApi(
 type ErrorBody = {
   message?: unknown;
   code?: unknown;
+  issues?: unknown;
   requiredPermission?: unknown;
   role?: unknown;
   keyRole?: unknown;
@@ -114,8 +115,24 @@ function errorBody(parsed: unknown): ErrorBody {
   return typeof parsed === "object" && parsed !== null ? (parsed as ErrorBody) : {};
 }
 
+type PostIssue = {
+  code?: unknown;
+  severity?: unknown;
+  message?: unknown;
+  platform?: unknown;
+  connectionId?: unknown;
+};
+
+function issueLine(issue: PostIssue): string {
+  const where = [optionalString(issue.platform), optionalString(issue.connectionId)].filter(Boolean).join(" ");
+  return `${String(issue.severity ?? "ERROR")} ${String(issue.code ?? "")}${where ? ` (${where})` : ""}: ${String(issue.message ?? "")}`;
+}
+
 function errorMessage(parsed: unknown): string {
-  const { message } = errorBody(parsed);
+  const { message, code, issues } = errorBody(parsed);
+  if (code === "post_validation_failed" && Array.isArray(issues) && issues.length > 0) {
+    return (issues as PostIssue[]).map(issueLine).join("; ");
+  }
   if (Array.isArray(message)) return message.map(String).join("; ");
   if (message !== undefined) return String(message);
   return typeof parsed === "string" ? parsed : JSON.stringify(parsed);
@@ -195,6 +212,8 @@ function describeApiError(
         .join(" ");
     case "token_issuer_lost_access":
       return `AdaptlyPost rejected the key (401 token_issuer_lost_access): ${message} Stop and ask the user for a new key from a workspace member who still has access.`;
+    case "post_validation_failed":
+      return `AdaptlyPost refused the post (400 post_validation_failed): ${message.replace(/\.$/, "")}. Nothing was created. Tell the user what each issue says and fix it before calling again; the same post fails the same way. adaptlypost_validate_post shows every account's status without creating anything.`;
     case "subscription_required":
       return `AdaptlyPost refused this call (403 subscription_required): ${message} Retrying will not help; the user has to update the workspace subscription.`;
     default:

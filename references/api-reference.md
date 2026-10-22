@@ -28,7 +28,7 @@ Which permission each endpoint needs:
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
-| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards` | `posts.draft` | admin, editor, contributor |
+| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
@@ -523,6 +523,59 @@ A Pinterest `boardName`, at the batch level or on an item, is resolved per item.
 - Each post is processed independently — if one fails, others still schedule
 - Only one account per platform allowed (platform ToS compliance)
 - Per-post platform configs completely replace batch-level configs (no merging)
+
+### POST /social-posts/validate
+
+Dry-runs a post. Takes the same body as [POST /social-posts](#post-social-posts) and runs every check that call runs, plus the ones that usually fail only at publish time (TikTok creator limits and video length, the YouTube upload quota for channels without a backup upload, expired Instagram and Threads tokens, Mastodon attachments past the server's limit, Pinterest board ids, X credits on lifetime deals). It creates, uploads and records nothing. Needs `posts.draft` and no active plan.
+
+Content problems answer `200` with the report. `400` means a malformed body, `401` and `403` the usual auth answers.
+
+**Response:**
+
+```json
+{
+  "valid": false,
+  "outcome": "SCHEDULED",
+  "scheduledAt": "2026-03-15T10:00:00.000Z",
+  "requiredPermissions": ["posts.schedule"],
+  "issues": [],
+  "accounts": [
+    { "platform": "TWITTER", "connectionId": "conn_tw1", "accountName": "Acme", "status": "BLOCKED",
+      "issues": [{ "code": "TEXT_TOO_LONG", "severity": "ERROR", "message": "Text exceeds maximum length for X. Maximum is 280 characters", "platform": "TWITTER", "connectionId": "conn_tw1" }] },
+    { "platform": "LINKEDIN", "connectionId": "conn_li1", "accountName": "Acme Inc", "status": "READY", "issues": [] }
+  ],
+  "notChecked": [
+    { "code": "PLATFORM_PROCESSING", "message": "The platform processes media after upload and can still reject it then" }
+  ]
+}
+```
+
+- `valid` (boolean): `false` when any issue has severity `ERROR`
+- `outcome`: `PUBLISH_NOW`, `SCHEDULED` or `DRAFT`, what creating the post would do; `scheduledAt` is set when `SCHEDULED`
+- `requiredPermissions` (string[]): the permissions creating it needs. A missing one is reported as a `PERMISSION_DENIED` issue
+- `issues`: problems not tied to one selected account
+- `accounts`: one entry per selected account with `platform`, `connectionId`, `accountName` (may be missing), `status` (`READY`, `WARNING` or `BLOCKED`) and its `issues`
+- `notChecked`: what only the platform can decide at publish time, each `{ code, message }` with `code` one of `PLATFORM_PROCESSING`, `DUPLICATE_CONTENT`, `PLATFORM_RATE_LIMITS`, `LIVE_ACCOUNT_ACCESS`, `VIDEO_DURATION`
+
+An issue is `{ code, severity, message, platform?, connectionId? }`. `severity` is `ERROR` (blocks the post) or `WARNING` (the post goes through). `message` is translated into the request's language; show it as is. Codes include the media and text checks (`TEXT_TOO_LONG`, `VIDEO_TOO_LARGE`, ...) and `ACCOUNT_NOT_FOUND`, `ACCOUNT_DISCONNECTED`, `ACCOUNT_TOKEN_EXPIRED`, `MEDIA_NOT_UPLOADED`, `TIKTOK_POSTING_BLOCKED`, `TIKTOK_VIDEO_TOO_LONG`, `TIKTOK_MEDIA_DOMAIN`, `YOUTUBE_UPLOAD_QUOTA_EXHAUSTED`, `MASTODON_MEDIA_DROPPED`, `PINTEREST_BOARD_NOT_FOUND`, `X_CREDITS_INSUFFICIENT`, `PERMISSION_DENIED`, `SUBSCRIPTION_REQUIRED` and `CHECK_UNAVAILABLE`. The list grows; treat an unknown code as opaque and show its `message`.
+
+### POST /social-posts/bulk/validate
+
+Takes the same body as [POST /social-posts/bulk](#post-social-postsbulk) and returns one report per item, in request order. Needs `posts.draft`.
+
+```json
+{
+  "valid": false,
+  "totalValid": 1,
+  "totalInvalid": 1,
+  "results": [
+    { "index": 0, "report": { "valid": true, "outcome": "SCHEDULED", "...": "..." } },
+    { "index": 1, "report": { "valid": false, "outcome": "SCHEDULED", "...": "..." } }
+  ]
+}
+```
+
+`index` is the item's 0-based position in `posts`, and each `report` has the shape above.
 
 ### POST /upload-urls
 
@@ -1140,6 +1193,22 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
   "statusCode": 400
 }
 ```
+
+**Post refused for its content (400):**
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "code": "post_validation_failed",
+  "message": "Text exceeds maximum length for X. Maximum is 280 characters",
+  "issues": [
+    { "code": "TEXT_TOO_LONG", "severity": "ERROR", "message": "Text exceeds maximum length for X. Maximum is 280 characters", "platform": "TWITTER", "connectionId": "conn_tw1" }
+  ]
+}
+```
+
+`POST /social-posts` answers this way when a check refuses the post. `message` is one string for one issue and an array of strings for several. `issues` has the same shape as in [POST /social-posts/validate](#post-social-postsvalidate). Fix what they name before sending again.
 
 **Permission denied (403):**
 

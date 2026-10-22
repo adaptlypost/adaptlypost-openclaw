@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.20.0
+version: 1.21.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -96,7 +96,7 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
    - Refuse to upload files from directories that may contain unrelated content (`~/Downloads`, `~/Desktop`, screenshot folders, etc.) without an explicit per-file "yes".
    - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4` or `.mov` image or video, or a `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` file the user named for a LinkedIn `DOCUMENT` post. Key files, `.env` files and config are never media.
    - Only download media from public `https://` URLs. Refuse `localhost`, private or link-local addresses (`10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, `::1`, `fc00::/7`) and cloud metadata hosts.
-5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop.
+5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop. A `400` with `code: post_validation_failed` lists what to fix in `issues` (step 16); resending the same body fails the same way.
 6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing. A recurring post cannot be a draft, so an unattended run never creates one unless the user pre-authorized that exact series.
 7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
 8. **Connect links are secrets.** Only create one when the user asks for it, give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
@@ -446,6 +446,37 @@ Also available: `/analytics/timeseries?granularity=DAILY|WEEKLY|MONTHLY` for a t
 
 Numbers refresh every few hours. If the user just published, `POST /analytics/sync` refreshes now, once per 10 minutes per workspace; inside the cooldown it returns `queued: false` with `cooldownSecondsRemaining`, so do not loop. Then poll `GET /analytics/sync-status` until `syncInProgress` is false. That endpoint also flags `needsAnalyticsReconnect` per account: the account was connected before analytics permissions existed and stays empty until the user reconnects it, so tell them instead of querying again. Full reference in [references/api-reference.md](references/api-reference.md#analytics).
 
+### 16. Check a post before creating it (dry run)
+
+`POST /social-posts/validate` takes the exact body of `POST /social-posts`, and `POST /social-posts/bulk/validate` the exact body of `POST /social-posts/bulk`. They run every check the real call runs, plus several that otherwise only fail at publish time: TikTok creator limits and video length, the YouTube upload quota, expired Instagram and Threads tokens, Mastodon attachment limits, Pinterest boards and X credits on lifetime deals. Nothing is created, uploaded or published, so a dry run needs no confirmation. It needs `posts.draft`, so a Contributor key can check a post it could not schedule.
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts/validate \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["TIKTOK"],
+    "contentType": "VIDEO",
+    "text": "Behind the scenes",
+    "timezone": "Europe/Berlin",
+    "mediaUrls": ["https://cdn.adaptlypost.com/uploads/clip.mp4"],
+    "tiktokConnectionIds": ["TIKTOK_ID"],
+    "tiktokConfigs": [{ "connectionId": "TIKTOK_ID", "privacyLevel": "PUBLIC_TO_EVERYONE" }]
+  }'
+```
+
+Content problems still answer `200` with a report; only a malformed body is a `400`. Read it like this:
+
+- `valid` is `false` when any issue has severity `ERROR`: the real call would refuse the post.
+- `outcome` is what the real call would do: `PUBLISH_NOW`, `SCHEDULED` (with `scheduledAt`) or `DRAFT`. `requiredPermissions` lists the keys it needs, and a missing one shows up as a `PERMISSION_DENIED` issue.
+- `accounts` has one row per selected account with `platform`, `connectionId`, `accountName`, `status` and `issues`. `READY` is fine, `WARNING` goes out but the user should read the issue, `BLOCKED` stops the post.
+- `issues` holds problems with the post as a whole.
+- `notChecked` lists what only the platform can decide at publish time (`PLATFORM_PROCESSING`, `DUPLICATE_CONTENT`, `PLATFORM_RATE_LIMITS`, `LIVE_ACCOUNT_ACCESS`, `VIDEO_DURATION`). A valid report is not a guarantee.
+
+Every issue is `{ "code", "severity", "message", "platform", "connectionId" }`. Show the user `message`, which is already translated. New codes can appear, so never branch on one you do not know. The bulk report is `{ "valid", "totalValid", "totalInvalid", "results": [{ "index", "report" }] }`, with `index` the 0-based position in `posts`.
+
+Run it after the user approved a post with video, TikTok, YouTube, Pinterest or X, or several accounts, and before a bulk schedule. Fix every `ERROR` with the user, mention any `WARNING` and the `notChecked` list in one line, then send the real call. It is never required: `POST /social-posts` runs the same checks, and a post it refuses for its content answers `400` with `code: post_validation_failed` and the same `issues` list. `message` is then one string for one issue, or an array for several. Full reference in [references/api-reference.md](references/api-reference.md#post-social-postsvalidate).
+
 ## Platform-Specific Configs
 
 Pass these as config arrays in the request body. See [references/platform-configs.md](references/platform-configs.md) for full details.
@@ -650,6 +681,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - Content types: `TEXT` (no media), `IMAGE` (single image), `VIDEO` (single video), `CAROUSEL` (2 or more images/videos), `DOCUMENT` (one PDF/PPT/PPTX/DOC/DOCX, LinkedIn only).
 - A published platform entry carries a `postUrl` on every platform. Instagram and Facebook stories expire after 24 hours, so theirs links to the profile or page.
 - Check `skippedPlatforms` in the response — it tells you if any platform was skipped and why.
+- To find problems before anything is created, send the same body to `POST /social-posts/validate` (or `/social-posts/bulk/validate`) and fix every `ERROR` in the report (step 16).
 - Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.
 - Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.

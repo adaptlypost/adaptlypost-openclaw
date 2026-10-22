@@ -80,7 +80,8 @@ clickable. OpenClaw caps a prompt at
 cutting anything, and tells the agent to save a draft or split the call. The
 prompt offers "allow once" and "deny", never "always". The plugin ties each approval
 to one tool call and a hash of its exact arguments, so a changed or replayed
-call is refused. Saving a draft needs no approval.
+call is refused. Saving a draft, or checking a post with
+`adaptlypost_validate_post`, needs no approval.
 
 When nobody can answer (a cron run, or a channel without approval support),
 OpenClaw denies the call. Unattended agents can still save drafts. To get the
@@ -116,6 +117,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
+| `adaptlypost_validate_post` | Check a post without creating it. Takes the same parameters as `adaptlypost_create_post` and returns each account's status, the issues to fix and what only the platform can decide. Needs no approval. |
 | `adaptlypost_list_posts` | List posts, including scheduled and draft. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
@@ -128,7 +130,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Eighteen tools, fewer than the MCP server exposes. Post editing, deletion,
+Nineteen tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out, because an agent picking from
 a long list of near-identical tools picks worse. Those live in the
@@ -175,6 +177,14 @@ date happens in the AdaptlyPost app.
 Media has to reach storage before the post references it. `adaptlypost_upload_media`
 does the presign and the PUT together, so a post that names an unstored file
 fails with "Media file(s) not found in storage".
+
+`adaptlypost_validate_post` takes the same parameters as
+`adaptlypost_create_post` and creates nothing. It runs every check the create
+call runs, plus the ones that usually fail only at publish time: TikTok creator
+limits, the YouTube upload quota, expired Instagram and Threads tokens, Pinterest
+boards and X credits. Each account comes back `READY`, `WARNING` or `BLOCKED`
+with the issues to fix. A post the create call refuses for its content answers
+400 `post_validation_failed`, and the plugin passes on every issue in the error.
 
 Every platform publishes on its own. Read `adaptlypost_post_results` per
 platform rather than treating a post as one pass or fail. A platform

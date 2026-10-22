@@ -452,6 +452,100 @@ const PlatformAspectRatio = Type.Object({
   ),
 });
 
+const PostParameters = Type.Object({
+  platforms: Type.Array(Platform, {
+    minItems: 1,
+    description:
+      "Target platforms. Each needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from adaptlypost_accounts.",
+  }),
+  contentType: Type.Union(
+    [
+      Type.Literal("TEXT"),
+      Type.Literal("IMAGE"),
+      Type.Literal("VIDEO"),
+      Type.Literal("CAROUSEL"),
+      Type.Literal("DOCUMENT"),
+    ],
+    {
+      description:
+        "Must match the media supplied. CAROUSEL needs more than one mediaUrl. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
+    },
+  ),
+  text: Type.Optional(Type.String({ description: "Default caption shared across platforms." })),
+  platformTexts: Type.Optional(
+    Type.Array(Type.Object({ platform: Platform, text: Type.String() }), {
+      description: "Per-platform caption overrides.",
+    }),
+  ),
+  firstComments: Type.Optional(
+    Type.Array(FirstComment, {
+      description:
+        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn and YouTube, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
+    }),
+  ),
+  mediaUrls: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "publicUrl values returned by adaptlypost_upload_media. The same publicUrl may be reused across posts; do not reuse mediaUrls read back from a published post.",
+    }),
+  ),
+  mediaAltTexts: Type.Optional(
+    Type.Array(Type.String({ maxLength: 1000 }), {
+      description:
+        'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
+    }),
+  ),
+  mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
+    description:
+      "DRAFT: save without publishing. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",
+  }),
+  scheduledAt: Type.Optional(
+    Type.String({
+      description:
+        "Absolute ISO 8601 instant in the future. Required with mode SCHEDULE, rejected with the other modes.",
+    }),
+  ),
+  timezone: Type.Optional(
+    Type.String({
+      description:
+        "IANA timezone stored with the post for display, defaults to UTC; it does not shift scheduledAt.",
+    }),
+  ),
+  thumbnailUrl: Type.Optional(
+    Type.String({
+      description:
+        "Video thumbnail as an https URL or image data URI, used on every platform that takes one unless platformThumbnails overrides it.",
+    }),
+  ),
+  thumbnailTimestampMs: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      description:
+        "Video frame (ms) to use as the thumbnail on INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it.",
+    }),
+  ),
+  platformThumbnails: Type.Optional(
+    Type.Array(PlatformThumbnail, {
+      description:
+        "A different thumbnail for one platform of a VIDEO post, one entry per platform. Platforms without an entry use thumbnailUrl and thumbnailTimestampMs. Not for Facebook or Instagram stories.",
+    }),
+  ),
+  platformAspectRatios: Type.Optional(
+    Type.Array(PlatformAspectRatio, {
+      description:
+        "Reframe every image of an IMAGE or CAROUSEL post to one shape on INSTAGRAM or TIKTOK, one entry per platform. Not for video posts or Instagram stories. Omit a platform to keep its images as uploaded.",
+    }),
+  ),
+  twitterKeepLinks: Type.Optional(
+    Type.Boolean({
+      description:
+        "Keep links in the X text clickable. By default every link in X text is broken (example.com becomes example. com) because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn this on, and a kept link costs 20 credits instead of 2; true on any other plan is a 400. Ignored when the X text has no link.",
+    }),
+  ),
+  recurrence: Type.Optional(Recurrence),
+  ...ConnectionIdFields,
+  ...PlatformConfigFields,
+});
+
 export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
@@ -641,99 +735,7 @@ export default definePluginEntry({
       label: "AdaptlyPost: create or schedule a post",
       description:
         "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
-      parameters: Type.Object({
-        platforms: Type.Array(Platform, {
-          minItems: 1,
-          description:
-            "Target platforms. Each needs its matching connection-id array (pageIds for FACEBOOK) filled with ids from adaptlypost_accounts.",
-        }),
-        contentType: Type.Union(
-          [
-            Type.Literal("TEXT"),
-            Type.Literal("IMAGE"),
-            Type.Literal("VIDEO"),
-            Type.Literal("CAROUSEL"),
-            Type.Literal("DOCUMENT"),
-          ],
-          {
-            description:
-              "Must match the media supplied. CAROUSEL needs more than one mediaUrl. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
-          },
-        ),
-        text: Type.Optional(Type.String({ description: "Default caption shared across platforms." })),
-        platformTexts: Type.Optional(
-          Type.Array(Type.Object({ platform: Platform, text: Type.String() }), {
-            description: "Per-platform caption overrides.",
-          }),
-        ),
-        firstComments: Type.Optional(
-          Type.Array(FirstComment, {
-            description:
-              "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn and YouTube, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
-          }),
-        ),
-        mediaUrls: Type.Optional(
-          Type.Array(Type.String(), {
-            description: "publicUrl values returned by adaptlypost_upload_media. The same publicUrl may be reused across posts; do not reuse mediaUrls read back from a published post.",
-          }),
-        ),
-        mediaAltTexts: Type.Optional(
-          Type.Array(Type.String({ maxLength: 1000 }), {
-            description:
-              'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
-          }),
-        ),
-        mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
-          description:
-            "DRAFT: save without publishing. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",
-        }),
-        scheduledAt: Type.Optional(
-          Type.String({
-            description:
-              "Absolute ISO 8601 instant in the future. Required with mode SCHEDULE, rejected with the other modes.",
-          }),
-        ),
-        timezone: Type.Optional(
-          Type.String({
-            description:
-              "IANA timezone stored with the post for display, defaults to UTC; it does not shift scheduledAt.",
-          }),
-        ),
-        thumbnailUrl: Type.Optional(
-          Type.String({
-            description:
-              "Video thumbnail as an https URL or image data URI, used on every platform that takes one unless platformThumbnails overrides it.",
-          }),
-        ),
-        thumbnailTimestampMs: Type.Optional(
-          Type.Integer({
-            minimum: 0,
-            description:
-              "Video frame (ms) to use as the thumbnail on INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it.",
-          }),
-        ),
-        platformThumbnails: Type.Optional(
-          Type.Array(PlatformThumbnail, {
-            description:
-              "A different thumbnail for one platform of a VIDEO post, one entry per platform. Platforms without an entry use thumbnailUrl and thumbnailTimestampMs. Not for Facebook or Instagram stories.",
-          }),
-        ),
-        platformAspectRatios: Type.Optional(
-          Type.Array(PlatformAspectRatio, {
-            description:
-              "Reframe every image of an IMAGE or CAROUSEL post to one shape on INSTAGRAM or TIKTOK, one entry per platform. Not for video posts or Instagram stories. Omit a platform to keep its images as uploaded.",
-          }),
-        ),
-        twitterKeepLinks: Type.Optional(
-          Type.Boolean({
-            description:
-              "Keep links in the X text clickable. By default every link in X text is broken (example.com becomes example. com) because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn this on, and a kept link costs 20 credits instead of 2; true on any other plan is a 400. Ignored when the X text has no link.",
-          }),
-        ),
-        recurrence: Type.Optional(Recurrence),
-        ...ConnectionIdFields,
-        ...PlatformConfigFields,
-      }),
+      parameters: PostParameters,
       async execute(toolCallId, params, signal) {
         const post = params as Record<string, unknown> & { mode: string };
         let body = buildPostBody(post);
@@ -753,6 +755,18 @@ export default definePluginEntry({
           savedAsDraft: true,
           note: `Saved as a draft instead of ${post.mode === "PUBLISH_NOW" ? "publishing" : "scheduling"}: this key's role cannot do that, and the user approved the draft. A workspace member can publish it in the AdaptlyPost app.`,
         });
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_validate_post",
+      label: "AdaptlyPost: check a post without creating it",
+      description:
+        "Dry-run a post: takes exactly the parameters of adaptlypost_create_post and runs every check the create call runs, plus the ones that usually fail only at publish time (TikTok creator limits and video length, the YouTube upload quota, expired Instagram and Threads tokens, Mastodon attachment limits, Pinterest boards, X credits on lifetime deals). Nothing is created, uploaded or published, so it needs no approval, and any key that can draft may call it. Returns { valid, outcome, scheduledAt, requiredPermissions, issues, accounts, notChecked }. valid is false when any issue has severity ERROR, which means adaptlypost_create_post would refuse the post. outcome is what the create call would do: PUBLISH_NOW, SCHEDULED or DRAFT. accounts has one row per selected account with platform, connectionId, accountName, status (READY, WARNING or BLOCKED) and its issues; issues holds problems with the post as a whole. Each issue is { code, severity, message, platform, connectionId }: show the user message, and treat a code you do not know as opaque. notChecked lists what only the platform can decide at publish time, so mention it in one line: a valid report is not a guarantee. Call it after the user approved a post with video, TikTok, YouTube, Pinterest or X, or several accounts, then fix every ERROR with the user before calling adaptlypost_create_post with the same parameters. It is never required: adaptlypost_create_post runs the same checks and refuses a bad post with 400 post_validation_failed and the same issues.",
+      parameters: PostParameters,
+      async execute(_toolCallId, params, signal) {
+        const body = buildPostBody(params as Record<string, unknown>);
+        return jsonResult(await callApi(cfg(), "POST", "/social-posts/validate", { body, signal }));
       },
     });
 
