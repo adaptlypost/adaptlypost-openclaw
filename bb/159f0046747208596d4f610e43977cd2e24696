@@ -1,0 +1,35 @@
+SKILL.md
+  s_0f001a19c97a17::t_3e4cedb2310c7e 87,496,616
+openclaw-plugin/README.md
+  s_0f001a19c97a17::t_f40ba22ee55477 75-76,171-176
+openclaw-plugin/src/approvals.ts
+  s_0f001a19c97a17::t_ef468bcddb9870 301-305,325-326,583
+openclaw-plugin/src/index.ts
+  s_0f001a19c97a17::t_b2dcf43ae13682 214,224-244,758
+references/api-reference.md
+  s_0f001a19c97a17::t_17de922cd8cc10 420
+references/platform-configs.md
+  s_0f001a19c97a17::t_22947c05b11d04 73,83,87-107
+skills/adaptlypost/SKILL.md
+  s_0f001a19c97a17::t_3251636a346d64 87,496,616
+skills/adaptlypost/references/api-reference.md
+  s_0f001a19c97a17::t_cbf5dbed4560c9 420
+skills/adaptlypost/references/platform-configs.md
+  s_0f001a19c97a17::t_a55bb6e4fcbb3c 73,83,87-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb159f0046747208596d4f610e43977cd2e24696",
+  "prompts": {},
+  "sessions": {
+    "s_0f001a19c97a17": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2258b7bb-f524-4a93-bf0c-14370b7f1895",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
