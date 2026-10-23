@@ -72,8 +72,8 @@ a scheduled post (Contributor and Viewer), is refused before the prompt.
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
 and every caption including per-platform overrides. It also lists each first
-comment, Instagram collaborators, audio and story sharing, Facebook story
-sharing and text backgrounds, the Google Business Profile topic, event, offer
+comment, Instagram collaborators, tagged accounts, audio and story sharing,
+Facebook story sharing and text backgrounds, the Google Business Profile topic, event, offer
 and button, per-platform thumbnails and image shapes, and X links that stay
 clickable. OpenClaw caps a prompt at
 512 characters. When a call doesn't fit, the plugin refuses it instead of
@@ -167,6 +167,12 @@ To add music to an Instagram Reel, find an `audioId` with
 `adaptlypost_search_instagram_audio` and pass it in `instagramConfigs[].audio`.
 It works for Instagram accounts connected through Facebook, which
 `adaptlypost_accounts` marks with `supportsInstagramAudio: true`.
+
+`instagramConfigs[].userTags` tags up to 20 public Instagram accounts in one
+image or one video, feed or story. Each tag is a `username` with `x` and `y`
+from 0 to 1, measured from the top-left corner. A feed image needs both on
+every tag, a story takes them optionally, and a video ignores them. A carousel
+or several stories with tags is refused.
 
 `recurrence` on `adaptlypost_create_post` repeats a post daily, weekly,
 monthly or yearly. It needs mode SCHEDULE, since the first post sets the time of day, and

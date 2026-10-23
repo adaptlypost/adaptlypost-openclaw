@@ -70,6 +70,7 @@ For bulk scheduling, configs can be set at two levels:
 | `trialGraduation` | string | no | Publish the reel as a trial reel. `MANUAL`: you share it to followers from the Instagram app. `SS_PERFORMANCE`: Instagram shares it if it performs well |
 | `shareToStory` | boolean | no | Also publish the same media as a story next to the `FEED` or `REEL` post. Ignored when `postType` is `STORY` |
 | `collaborators` | string[] | no | Up to 3 Instagram usernames invited as collaborators. A leading `@` is stripped and duplicates are dropped |
+| `userTags` | object[] | no | Up to 20 public accounts tagged in the media, each `{ "username": "...", "x": 0.5, "y": 0.3 }`. See [User tags](#user-tags) |
 | `aiGenerated` | boolean | no | Disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too |
 | `audio` | object | no | Music or an original sound added to a Reel. See [Audio](#audio) |
 
@@ -79,9 +80,30 @@ For bulk scheduling, configs can be set at two levels:
 - **REEL**: Video up to 15 minutes, 9:16 recommended. Needs `contentType: VIDEO`
 - **STORY**: 24-hour temporary content. `IMAGE`, `VIDEO` or `CAROUSEL`; a carousel story publishes each item as its own story, in order
 
-**Share to story:** `shareToStory: true` publishes the same media as a story too. The story is its own entry in the post's `platforms` with `postType: STORY`, so it succeeds, fails and retries on its own. It skips the caption, first comment, cover, collaborators, trial and audio, needs `IMAGE`, `VIDEO` or `CAROUSEL`, and a story video must be 60 seconds or shorter.
+**Share to story:** `shareToStory: true` publishes the same media as a story too. The story is its own entry in the post's `platforms` with `postType: STORY`, so it succeeds, fails and retries on its own. It skips the caption, first comment, cover, collaborators, user tags, trial and audio, needs `IMAGE`, `VIDEO` or `CAROUSEL`, and a story video must be 60 seconds or shorter.
 
 **Collaborators:** work on feed images, carousels and reels. A story or a trial reel with collaborators returns `400`. Each collaborator gets an invite in Instagram and must accept it before the post shows on their profile.
+
+#### User tags
+
+```json
+{
+  "connectionId": "instagram-connection-id",
+  "postType": "FEED",
+  "userTags": [
+    { "username": "jane.doe", "x": 0.25, "y": 0.6 },
+    { "username": "@acme", "x": 0.7, "y": 0.4 }
+  ]
+}
+```
+
+- `username`: a public Instagram username, 1 to 30 letters, digits, dots or underscores. A leading `@` is stripped and a repeated username keeps its first entry.
+- `x`, `y`: where the tag sits, from 0 to 1 across the image from the top-left corner (`x` left to right, `y` top to bottom).
+- Tags work on one image (feed or story) or one video (Reel or story). A carousel or several stories with tags returns `400`.
+- On a feed image every tag needs both `x` and `y`, or the API returns `400`. On a story they are optional, but a tag with only one of them returns `400`. On a video they are ignored and the person is tagged on the video as a whole.
+- If Instagram refuses a tag because the account is private or doesn't exist, the post goes out without its tags and `instagramUntaggedUsernames` lists the refused usernames.
+- The story that `shareToStory` adds does not carry the tags.
+- The post reads them back as `instagramUserTags` on each Instagram platform entry.
 
 #### Audio
 

@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.22.0
+version: 1.23.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -84,7 +84,7 @@ On `permission_denied`: stop. Do not retry, do not look for another key, do not 
 Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry`, `POST /recurring-posts/:id/resume` and `POST /upload-urls` as a high-impact action.
 
 1. **Confirm before every post.** Before calling `POST /social-posts`, show the user a summary and get an explicit "yes" covering all four items:
-   - **Content** — exact text (and per-platform overrides), media filenames, first comments, Instagram collaborators and audio, Google Business Profile event, offer and button
+   - **Content** — exact text (and per-platform overrides), media filenames, first comments, Instagram collaborators, user tags and audio, Google Business Profile event, offer and button
    - **Platforms** — which networks and which connected accounts (by `displayName`/`username`, not just ID)
    - **Timing** — "now", a specific scheduled time, or draft. For a recurring post, also how often it repeats and when it stops
    - **Visibility** — TikTok `privacyLevel`, YouTube `privacyStatus`, Instagram `postType` and `shareToStory`, Facebook `shareToStory`, X `twitterKeepLinks`, the Pinterest board, etc.
@@ -493,7 +493,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
 | **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
-| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `aiGenerated` (AI info label), `audio` (Reels) |
+| **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `userTags` (up to 20), `aiGenerated` (AI info label), `audio` (Reels) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background), `imageLayout` and `carouselCards` (link carousel) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
 | **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `playlistId` |
@@ -613,6 +613,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `twitterKeepLinks: true`: keeps links in X text clickable. By default every link in X text is broken (`example.com` becomes `example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; any other plan gets `400`. `POST /social-posts` and `PATCH` only, not bulk.
 - `instagramConfigs[].shareToStory` and `facebookConfigs[].shareToStory`: also publish the same media as a story next to the feed post or reel. The story is its own entry in `platforms` with `postType: STORY` and succeeds, fails and retries on its own. It skips the caption and first comment, and a story video must be 60 seconds or shorter.
 - `instagramConfigs[].collaborators`: up to 3 Instagram usernames invited as collaborators on a feed image, carousel or reel. Each has to accept the invite in Instagram.
+- `instagramConfigs[].userTags`: up to 20 public accounts tagged in the media, each `{ "username": "jane.doe", "x": 0.5, "y": 0.3 }`. `x` and `y` run from 0 to 1 from the top-left corner. Only one image (feed or story) or one video (Reel or story); a carousel or several stories with tags returns `400`. A feed image needs both `x` and `y` on every tag, a story takes them optionally but never just one, and a video ignores them. If Instagram refuses a tag because the account is private or doesn't exist, the post goes out without its tags and `instagramUntaggedUsernames` lists the refused usernames. The story `shareToStory` adds carries no tags.
 - `instagramConfigs[].aiGenerated: true`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too.
 - `youtubeConfigs[].aiGenerated: true`: disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts. Omit it or send `false` for no label.
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.

@@ -298,6 +298,11 @@ function handles(value: unknown): string {
     .join(", ");
 }
 
+function tagHandles(value: unknown): string {
+  const tags = Array.isArray(value) ? value : [];
+  return handles(tags.map((tag) => (tag && typeof tag === "object" ? (tag as ConfigEntry).username : undefined)));
+}
+
 function audioLabel(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const audio = value as ConfigEntry;
@@ -317,6 +322,8 @@ function instagramLine(entry: ConfigEntry): string {
   if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
   const collaborators = handles(entry.collaborators);
   if (collaborators) parts.push(`collaborators ${collaborators}`);
+  const tagged = tagHandles(entry.userTags);
+  if (tagged) parts.push(`tags ${tagged}`);
   if (entry.aiGenerated === true) parts.push("AI info label");
   const audio = audioLabel(entry.audio);
   if (audio) parts.push(audio);
@@ -573,6 +580,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
         ? DEFAULT_PINTEREST_BOARD
         : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
+    tagHandles(entry.instagramUserTags) ? `tags ${tagHandles(entry.instagramUserTags)}` : undefined,
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
     entry.youtubeAiGenerated === true ? "altered or synthetic content label" : undefined,
     entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
