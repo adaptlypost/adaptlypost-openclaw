@@ -3,7 +3,7 @@
 Base URL: `https://post.adaptlypost.com/post/api/v1`
 Auth: `Authorization: Bearer <api-token>` header. Tokens start with the `adaptly_` prefix.
 
-The same header also accepts a WorkOS OAuth access token, which is how the hosted MCP server authenticates. For a skill, use an `adaptly_` token.
+The same header also accepts a WorkOS OAuth token, which is how the hosted MCP server authenticates. For a skill, use an `adaptly_` token.
 
 ## Roles and permissions
 
@@ -64,7 +64,7 @@ List all connected social media accounts for the account group tied to this API 
       "username": "",
       "avatarUrl": "",
       "status": "unauthorized",
-      "unauthorizedReason": "This Page access token belongs to a Page that is not accessible.",
+      "unauthorizedReason": "The session has been invalidated because the user changed their password.",
       "pageId": "123456789012345"
     }
   ]
@@ -98,7 +98,7 @@ Asks Facebook whether the page token still works, right now. Pages are also chec
   "displayName": "My Business Page",
   "pageId": "123456789012345",
   "status": "unauthorized",
-  "unauthorizedReason": "This Page access token belongs to a Page that is not accessible.",
+  "unauthorizedReason": "The session has been invalidated because the user changed their password.",
   "checkedAt": "2026-09-13T09:10:00.000Z"
 }
 ```
@@ -708,7 +708,7 @@ Get `platformIds` from `GET /social-posts/:id/results`, or name the platform. Re
 
 Mint a link that lets someone connect social accounts to this account group without an AdaptlyPost login of their own. Built for agencies onboarding a client, and for agents that need an account connected but must never handle the credentials.
 
-Send no body for a quick link: every platform, every account in the group visible to the client, no limit, expiring after 7 days. Every field is optional:
+Every field is optional. With no body the link offers every platform, shows the client every account in the group, has no cap and expires after 7 days. An agent always sends a body: `PRIVATE`, the platforms asked for, `maxAccounts` and a short `expiresAt`, and widens a field only when the user asks.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -873,7 +873,7 @@ Rather than polling `GET /social-posts` to find out whether something published,
 | `image.completed` | An AI image job finished; `data.image` carries `jobId`, `sessionId`, `prompt`, `imageUrl` and `imageId` |
 | `image.failed` | An AI image job failed; `data.image` carries `jobId`, `sessionId`, `prompt` and `error` |
 
-Every webhook receives every event: there is no per-event subscription. Post events carry `data.post`, account events `data.account`, image events `data.image`. `data.post` has the same shape as `GET /social-posts/:id`, so it carries every platform entry field, first comments and Google Business Profile settings included.
+Every webhook receives every event of the workspace, for every post and account, until it is deleted: there is no per-event or per-account subscription. Register one only for a URL the user gave and after they agree to that scope; to follow one post, poll `GET /social-posts/:id`. Post events carry `data.post`, account events `data.account`, image events `data.image`. `data.post` has the same shape as `GET /social-posts/:id`, so it carries every platform entry field, first comments and Google Business Profile settings included.
 
 ### POST /api/v1/webhooks
 

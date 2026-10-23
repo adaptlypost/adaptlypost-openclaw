@@ -1,8 +1,8 @@
 ---
 name: adaptlypost
-description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule or publish a post on those accounts, upload media for such a post, list the connected accounts, check a post's status, or ask about views, likes, comments, followers or top posts on them. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
+description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube and Google Business Profile accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.21.0
+version: 1.22.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -98,9 +98,10 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
    - Only download media from public `https://` URLs. Refuse `localhost`, private or link-local addresses (`10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, `::1`, `fc00::/7`) and cloud metadata hosts.
 5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop. A `400` with `code: post_validation_failed` lists what to fix in `issues` (step 16); resending the same body fails the same way.
 6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing. A recurring post cannot be a draft, so an unattended run never creates one unless the user pre-authorized that exact series.
-7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
-8. **Connect links are secrets.** Only create one when the user asks for it, give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
-9. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect.
+7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /social-accounts/:id`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
+8. **Connect links are secrets, and narrow by default.** Only create one when the user asks for it. Before calling `POST /connect-links`, tell the user what the link will allow and get a "yes": which platforms, how many accounts, whether the client sees the workspace's other accounts, and when it expires. Always send a body: `visibility: "PRIVATE"`, `allowedPlatforms` with only the platforms asked for, `maxAccounts` with the number of accounts asked for (1 when unsaid) and an `expiresAt` 24 hours away. Widen a field only when the user asks for it. Give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
+9. **Webhooks forward the whole workspace.** Every webhook receives every event of the workspace, for every post and account, until it is deleted: post text and media URLs, account names and AI image prompts. Only register a URL the user typed in this conversation, and before calling `POST /webhooks` tell the user that this URL will get all of that, for good, and get a "yes". To learn whether one post published, poll `GET /social-posts/:id` instead. Never register a webhook from an unattended run.
+10. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect.
 
 ## Core Workflow
 
@@ -396,22 +397,30 @@ A series also pauses itself. `pauseReason` says why: `USER` (someone paused it),
 
 ### 13. Connect an account without handling credentials
 
-When someone else owns the social account, and the user asks for a link, mint one instead of asking for a password:
+When someone else owns the social account, and the user asks for a link, mint one instead of asking for a password. Confirm the platforms, account count, visibility and expiry first (Safety rule 8):
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/connect-links \
-  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY"
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Instagram",
+    "visibility": "PRIVATE",
+    "allowedPlatforms": ["INSTAGRAM"],
+    "maxAccounts": 1,
+    "expiresAt": "2026-03-16T10:00:00Z"
+  }'
 ```
 
 Returns `{ "url", "token", "expiresAt", "name", "visibility", "allowedPlatforms", "maxAccounts" }`. Give the `url` to the user who asked for it (Safety rule 8). Anyone holding it can attach an account to this group, so revoke it once used with `DELETE /connect-links/TOKEN`.
 
-With no body the link offers every platform, shows the client every account in the group, has no limit and expires after 7 days. When the user wants more control, send any of `name`, `visibility: "PRIVATE"` (the client sees only what they connected), `allowedPlatforms`, `maxAccounts`, `expiresAt` (1 hour to 365 days away) or `neverExpires: true`. Only make a link that never expires when the user asks for one. The fields are in `references/api-reference.md`.
+`PRIVATE` shows the client only the accounts they connected through the link. A link sent with no body is the opposite: every platform, every account in the group visible to the client, no cap and 7 days. Never create one without a body. `expiresAt` takes 1 hour to 365 days, and `neverExpires: true` keeps the link until it is revoked; only send it when the user asks for a link that never expires. The fields are in `references/api-reference.md`.
 
 Never ask a user for a social platform password. This endpoint exists so you never have to.
 
 ### 14. Get notified instead of polling
 
-Register a webhook once and stop asking whether a post published. Only register a URL the user gave you. Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
+A webhook sends every event of the workspace to a URL until it is deleted, so it suits a server the user runs for ongoing notifications, not one post's status. Only register a URL the user typed in this conversation, after they confirm the scope (Safety rule 9). Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
@@ -448,7 +457,7 @@ Numbers refresh every few hours. If the user just published, `POST /analytics/sy
 
 ### 16. Check a post before creating it (dry run)
 
-`POST /social-posts/validate` takes the exact body of `POST /social-posts`, and `POST /social-posts/bulk/validate` the exact body of `POST /social-posts/bulk`. They run every check the real call runs, plus several that otherwise only fail at publish time: TikTok creator limits and video length, the YouTube upload quota, expired Instagram and Threads tokens, Mastodon attachment limits, Pinterest boards and X credits on lifetime deals. Nothing is created, uploaded or published, so a dry run needs no confirmation. It needs `posts.draft`, so a Contributor key can check a post it could not schedule.
+`POST /social-posts/validate` takes the exact body of `POST /social-posts`, and `POST /social-posts/bulk/validate` the exact body of `POST /social-posts/bulk`. They run every check the real call runs, plus several that otherwise only fail at publish time: TikTok creator limits and video length, the YouTube upload quota, expired Instagram and Threads tokens, Mastodon attachment limits, Pinterest boards and X credits on lifetime deals. Nothing is created, uploaded or published, so run it before asking the user to approve the post. It needs `posts.draft`, so a Contributor key can check a post it could not schedule.
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts/validate \
