@@ -1,0 +1,33 @@
+SKILL.md
+  s_ca778be6fb24e2::t_d591da01b09e6d 5,610
+openclaw-plugin/README.md
+  s_ca778be6fb24e2::t_c1841bedf761cd 163-164
+openclaw-plugin/openclaw.plugin.json
+  s_ca778be6fb24e2::t_aa55d50c90d7ef 5
+openclaw-plugin/package.json
+  s_ca778be6fb24e2::t_20e19130b7c321 3
+openclaw-plugin/src/index.ts
+  s_ca778be6fb24e2::t_5306645d59ad04 426-427,433,506
+references/api-reference.md
+  s_ca778be6fb24e2::t_7b81f5bdf9a0ca 270-271,273
+skills/adaptlypost/SKILL.md
+  s_ca778be6fb24e2::t_c35629bde89b48 5,610
+skills/adaptlypost/references/api-reference.md
+  s_ca778be6fb24e2::t_ed20f53d56307c 270-271,273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40f4f00083664b0fc3a7a24f563fee57178edf03",
+  "prompts": {},
+  "sessions": {
+    "s_ca778be6fb24e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fea8a942-0662-453f-9838-beab267a608e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
