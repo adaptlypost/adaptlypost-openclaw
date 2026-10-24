@@ -166,8 +166,8 @@ its own message after the media, and a video takes an image thumbnail through
 the Connectors page, not through the plugin.
 
 `firstComments` adds a comment from the same account right after the post goes
-out on LinkedIn and YouTube, or a reply on X, Threads, Bluesky and Mastodon. A
-failed comment never fails the post.
+out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Threads,
+Bluesky and Mastodon. A failed comment never fails the post.
 
 To add music to an Instagram Reel, find an `audioId` with
 `adaptlypost_search_instagram_audio` and pass it in `instagramConfigs[].audio`.

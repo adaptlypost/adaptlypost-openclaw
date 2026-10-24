@@ -268,8 +268,10 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 | `BLUESKY` | reply | 300 |
 | `MASTODON` | reply | 500 |
 | `YOUTUBE` | comment | 10000 |
+| `FACEBOOK` | comment | 8000 |
+| `INSTAGRAM` | comment | 2200 |
 
-Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
+Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
 
 #### Platform thumbnails
 
