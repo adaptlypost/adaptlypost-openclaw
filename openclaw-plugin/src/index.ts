@@ -36,15 +36,12 @@ const POSTABLE_PLATFORMS = [
   Type.Literal("TWITTER"),
   Type.Literal("MASTODON"),
   Type.Literal("GOOGLE_BUSINESS"),
+  Type.Literal("TELEGRAM"),
 ];
 
 const Platform = Type.Union(POSTABLE_PLATFORMS, {
-  description: "AdaptlyPost platform to post to. GOOGLE_BUSINESS is Google Business Profile.",
-});
-
-const AnyPlatform = Type.Union([...POSTABLE_PLATFORMS, Type.Literal("TELEGRAM")], {
   description:
-    "AdaptlyPost platform identifier. TELEGRAM posts are created in the AdaptlyPost app only, so they can be listed but not posted from here.",
+    "AdaptlyPost platform identifier. GOOGLE_BUSINESS is Google Business Profile; TELEGRAM is a Telegram channel or group.",
 });
 
 const PostStatus = Type.Union([
@@ -129,7 +126,7 @@ const AnalyticsRangeFields = {
   }),
   to: Type.String({ description: "End of the reporting window, ISO 8601. Not earlier than from." }),
   platforms: Type.Optional(
-    Type.Array(AnyPlatform, {
+    Type.Array(Platform, {
       description:
         "Restrict to these platforms; omit for every platform with analytics. MASTODON and TELEGRAM have none and are ignored.",
     }),
@@ -150,6 +147,12 @@ const ConnectionIdFields = {
     Type.Array(Type.String(), {
       description:
         "Google Business Profile location ids from adaptlypost_accounts (platform GOOGLE_BUSINESS, displayName is the location title). A location without a googleBusinessConfigs entry posts a STANDARD update.",
+    }),
+  ),
+  telegramConnectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Telegram channel and group ids from adaptlypost_accounts (platform TELEGRAM, displayName is the chat title). Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media.",
     }),
   ),
   pageIds: Type.Optional(
@@ -440,11 +443,12 @@ const PlatformThumbnail = Type.Object({
     Type.Literal("INSTAGRAM"),
     Type.Literal("PINTEREST"),
     Type.Literal("TIKTOK"),
+    Type.Literal("TELEGRAM"),
   ]),
   thumbnailUrl: Type.Optional(
     Type.String({
       description:
-        "Image for this platform's thumbnail: an https URL or an image data URI. YOUTUBE, FACEBOOK, LINKEDIN, INSTAGRAM and PINTEREST take one; TIKTOK does not.",
+        "Image for this platform's thumbnail: an https URL or an image data URI. YOUTUBE, FACEBOOK, LINKEDIN, TELEGRAM, INSTAGRAM and PINTEREST take one; TIKTOK does not.",
     }),
   ),
   thumbnailTimestampMs: Type.Optional(
@@ -512,7 +516,7 @@ const PostParameters = Type.Object({
   mediaAltTexts: Type.Optional(
     Type.Array(Type.String({ maxLength: 1000 }), {
       description:
-        'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube and videos ignore it.',
+        'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube, Telegram and videos ignore it.',
     }),
   ),
   mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
@@ -571,7 +575,7 @@ export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile and Telegram, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -612,7 +616,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all eleven platforms you can post to. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram accounts. For a Pinterest account, adaptlypost_list_pinterest_boards returns the boards it can pin to. A Google Business Profile account (platform GOOGLE_BUSINESS) is one location: displayName is its title and username is empty. Telegram chats are not listed, because Telegram posts are created in the AdaptlyPost app only. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds, Google Business Profile locations in googleBusinessConnectionIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all twelve platforms you can post to. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram accounts. For a Pinterest account, adaptlypost_list_pinterest_boards returns the boards it can pin to. A Google Business Profile account (platform GOOGLE_BUSINESS) is one location: displayName is its title and username is empty. A Telegram account (platform TELEGRAM) is a channel or group: displayName is the chat title, username is its public @username without the @ (empty for a private chat) and avatarUrl is empty. A Telegram chat can only be connected in the AdaptlyPost app, not through this plugin. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds, Google Business Profile locations in googleBusinessConnectionIds, Telegram chats in telegramConnectionIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -643,7 +647,7 @@ export default definePluginEntry({
       name: REMOVE_ACCOUNT_TOOL,
       label: "AdaptlyPost: remove an account",
       description:
-        "Disconnect a social account from the token's workspace, the same as removing it on the Connectors page: its stored login is deleted, pending and recurring posts stop publishing to it, and it stops counting toward the plan. Works on unauthorized accounts too, so use it when the user wants a disabled account cleaned up rather than reconnected. For a Facebook page only that page goes; other pages from the same login stay. Irreversible, so every call pauses for the user's approval; bringing the account back means connecting it again in the AdaptlyPost app. Needs an Admin key; other roles are refused before the prompt. Returns { id, platform, displayName, pageId, removed: true }.",
+        "Disconnect a social account from the token's workspace, the same as removing it on the Connectors page: its stored login is deleted, pending and recurring posts stop publishing to it, and it stops counting toward the plan. Works on unauthorized accounts too, so use it when the user wants a disabled account cleaned up rather than reconnected. For a Facebook page only that page goes; other pages from the same login stay. A removed Telegram chat stops getting posts, but the bot stays in the chat until someone removes it in Telegram. Irreversible, so every call pauses for the user's approval; bringing the account back means connecting it again in the AdaptlyPost app. Needs an Admin key; other roles are refused before the prompt. Returns { id, platform, displayName, pageId, removed: true }.",
       parameters: Type.Object({
         account_id: Type.String({
           description: "The account id from adaptlypost_accounts (or the Facebook pageId).",
@@ -755,7 +759,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image thumbnail through platformThumbnails. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: PostParameters,
       async execute(toolCallId, params, signal) {
         const post = params as Record<string, unknown> & { mode: string };
@@ -801,7 +805,7 @@ export default definePluginEntry({
           Type.Array(PostStatus, { description: "Filter by post status; omit for all statuses." }),
         ),
         platforms: Type.Optional(
-          Type.Array(AnyPlatform, { description: "Filter to posts targeting any of these platforms." }),
+          Type.Array(Platform, { description: "Filter to posts targeting any of these platforms." }),
         ),
         startDate: Type.Optional(
           Type.String({

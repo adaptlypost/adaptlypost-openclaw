@@ -1,8 +1,8 @@
 # AdaptlyPost plugin for OpenClaw
 
 Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok,
-YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile, from
-inside OpenClaw.
+YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile and
+Telegram, from inside OpenClaw.
 
 ## Install
 
@@ -156,8 +156,14 @@ Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500
 characters. Without a `googleBusinessConfigs` entry it goes out as a plain
 update; set `topicType` to `EVENT` or `OFFER` for an event or offer, and
-`callToActionType` for a button. Telegram posts can only be created in the
-AdaptlyPost app.
+`callToActionType` for a button.
+
+Telegram channels and groups go in `telegramConnectionIds`. A post there is
+text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or
+one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as
+its own message after the media, and a video takes an image thumbnail through
+`platformThumbnails`. A Telegram chat is connected in the AdaptlyPost app, on
+the Connectors page, not through the plugin.
 
 `firstComments` adds a comment from the same account right after the post goes
 out on LinkedIn and YouTube, or a reply on X, Threads, Bluesky and Mastodon. A

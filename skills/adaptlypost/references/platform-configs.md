@@ -361,4 +361,11 @@ These platforms use only connection ID arrays — no additional config:
 
 ### Telegram
 
-Telegram posts can only be created in the AdaptlyPost app. The API lists them on posts but cannot post to Telegram, and Telegram has no analytics.
+- Uses `telegramConnectionIds` array (channels and groups)
+- No config object
+- Character limit: 4,096
+- Up to 10 images (JPEG, PNG or WebP, 10 MB each), or one MP4 or MOV video up to 50 MB
+- A caption over 1,024 characters goes out as its own message right after the media
+- A video takes an image thumbnail (`platformThumbnails` with `thumbnailUrl`)
+- No alt text, first comments, threads, image shapes or analytics
+- Connecting a chat happens in the AdaptlyPost app: add the AdaptlyPost bot to the channel or group and send it the connect code from the Connectors page

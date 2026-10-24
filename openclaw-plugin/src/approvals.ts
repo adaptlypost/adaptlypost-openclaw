@@ -119,6 +119,7 @@ const CONNECTION_FIELDS: Record<string, string> = {
   TWITTER: "twitterConnectionIds",
   MASTODON: "mastodonConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
+  TELEGRAM: "telegramConnectionIds",
 };
 
 type Account = {

@@ -71,7 +71,7 @@ List all connected social media accounts for the account group tied to this API 
 }
 ```
 
-Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`
+Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`, `TELEGRAM`
 
 **Notes:**
 
@@ -82,7 +82,7 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 - Mastodon `username` is the full handle with the server (e.g., `user@mastodon.social`)
 - Google Business Profile accounts (`GOOGLE_BUSINESS`) are business locations: `displayName` is the location title and `username` is empty. Pass the `id` in `googleBusinessConnectionIds`
 - Instagram accounts carry `supportsInstagramAudio`: `true` when the account was connected through Facebook, which adding Instagram audio to Reels needs
-- Telegram chats are not listed. Telegram posts can only be created in the AdaptlyPost app
+- Telegram accounts (`TELEGRAM`) are channels and groups: `displayName` is the chat title, `username` is the public @username without the `@` (empty for a private chat) and `avatarUrl` is empty. Pass the `id` in `telegramConnectionIds`. The API cannot connect a Telegram chat; the user adds the AdaptlyPost bot to the chat and sends it the connect code from the Connectors page in the app
 - `status` is `active` or `unauthorized`. An unauthorized account stays listed but the platform rejected its token (a locked Facebook profile, a security checkpoint, a page the user lost access to). `POST /social-posts` refuses it with a 400 until the user reconnects it in the dashboard, so skip it when scheduling and tell the user to reconnect. `unauthorizedReason` is the platform's own message. Registered webhooks receive `account.unauthorized` the moment this happens
 
 ### POST /social-accounts/:id/check
@@ -107,7 +107,7 @@ A rejected token marks the page `unauthorized` and fires `account.unauthorized`;
 
 ### DELETE /social-accounts/:id
 
-Disconnects the account from the workspace, the same as removing it on the Connectors page: the stored login is deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. It works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. `:id` is the account `id` from `/social-accounts` or the Facebook `pageId`; for Facebook only that page goes, and other pages from the same login stay connected. Returns 404 when the workspace does not hold the account. It cannot be undone, so confirm with the user first.
+Disconnects the account from the workspace, the same as removing it on the Connectors page: the stored login is deleted, the account comes off every pending and recurring post, and it stops counting toward the plan. It works on any `status`, so an `unauthorized` account can be cleaned up without reconnecting it. `:id` is the account `id` from `/social-accounts` or the Facebook `pageId`; for Facebook only that page goes, and other pages from the same login stay connected. A removed Telegram chat stops getting posts, but the bot stays in the chat until someone removes it in Telegram. Returns 404 when the workspace does not hold the account. It cannot be undone, so confirm with the user first.
 
 **Response:**
 
@@ -211,8 +211,8 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 
 **Required fields:**
 
-- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`. `TELEGRAM` is rejected: Telegram posts can only be created in the app
-- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `CAROUSEL` takes 2 or more items in `mediaUrls`, up to 4 on `TWITTER`, `BLUESKY` and `MASTODON`, 5 on `PINTEREST`, 10 on `INSTAGRAM`, `FACEBOOK` and `THREADS`, 20 on `LINKEDIN` and 35 on `TIKTOK` (JPEG or WebP only). `INSTAGRAM` and `THREADS` mix images and videos in one carousel; the others take images only, and `YOUTUBE` has no carousel. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages). `GOOGLE_BUSINESS` takes `TEXT` or `IMAGE` only
+- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`
+- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `CAROUSEL` takes 2 or more items in `mediaUrls`, up to 4 on `TWITTER`, `BLUESKY` and `MASTODON`, 5 on `PINTEREST`, 10 on `INSTAGRAM`, `FACEBOOK`, `THREADS` and `TELEGRAM`, 20 on `LINKEDIN` and 35 on `TIKTOK` (JPEG or WebP only). `INSTAGRAM` and `THREADS` mix images and videos in one carousel; the others take images only, and `YOUTUBE` has no carousel. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages). `GOOGLE_BUSINESS` takes `TEXT` or `IMAGE` only
 - `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
 **Optional fields:**
@@ -220,7 +220,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 - `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`. The LinkedIn mention syntax works here too
 - `mediaUrls` (string[]): Public URLs of uploaded media files
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless `platformThumbnails` overrides it
 - `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on `INSTAGRAM`, `PINTEREST` and `TIKTOK` unless `platformThumbnails` overrides it
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
@@ -241,6 +241,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 - `pinterestConnectionIds` (string[]): Pinterest account connection IDs
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
 - `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
+- `telegramConnectionIds` (string[]): Telegram channel and group `id` values from `/social-accounts`. Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB). A caption over 1024 characters goes out as its own message after the media
 - `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost"
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
@@ -274,7 +275,7 @@ Any other platform returns `400`, as does a platform the post does not go to, an
 
 `platformThumbnails` gives one platform of a `VIDEO` post its own thumbnail, one entry per platform: `{ "platform", "thumbnailUrl", "thumbnailTimestampMs" }`. `thumbnailUrl` is an https URL or an image data URI; `thumbnailTimestampMs` is a video frame in ms (integer, 0 or more).
 
-- `YOUTUBE`, `FACEBOOK`, `LINKEDIN`: image only
+- `YOUTUBE`, `FACEBOOK`, `LINKEDIN`, `TELEGRAM`: image only
 - `INSTAGRAM`, `PINTEREST`: image or frame; the image wins when both are sent
 - `TIKTOK`: frame only
 
@@ -410,8 +411,6 @@ The post carries its `mediaUrls` at the top level as well as on each platform en
 
 `recurringPostId` names the recurring post this post is an occurrence of, and `occurrenceAt` is the series slot it fills, which stays the same when the post is rescheduled. Both are `null` on posts that are not part of a series.
 
-`TELEGRAM` platform entries appear on posts created in the app. The API reads them but cannot create them.
-
 Platform entry fields set by the newer request fields (absent when not used):
 
 - First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`
@@ -482,7 +481,7 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 
 **Optional fields (batch-level):**
 
-- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `pageIds`
+- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `pageIds`
 - Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`
 
 `firstComments`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`.
@@ -496,7 +495,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
 - `mediaUrls` (string[]): Media file URLs
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
@@ -1117,7 +1116,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 ## Enums
 
 **PlatformType:**
-`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM` (read only: posts and filters, never a post target)
+`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`
 
 **ContentType:**
 `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, `DOCUMENT`

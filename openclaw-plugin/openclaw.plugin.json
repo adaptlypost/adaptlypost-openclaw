@@ -1,8 +1,8 @@
 {
   "id": "adaptlypost",
   "name": "AdaptlyPost",
-  "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon and Google Business Profile from OpenClaw, and read how they performed.",
-  "version": "0.20.0",
+  "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile and Telegram from OpenClaw, and read how they performed.",
+  "version": "0.21.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
