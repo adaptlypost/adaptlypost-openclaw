@@ -22,8 +22,8 @@ Which permission each endpoint needs:
 | --- | --- | --- |
 | `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results`, `GET /recurring-posts`, `GET /recurring-posts/:id` | `posts.read` | all |
 | `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` on a dated `DRAFT` | `posts.draft` | admin, editor, contributor |
-| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `PATCH /social-posts/:id` and `POST /social-posts/:id/unschedule` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
-| `POST /social-posts` and `POST /social-posts/:id/publish` without `scheduledAt` or with a past one; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
+| `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `POST /social-posts/:id/publish` without `scheduledAt` or `publishNow` on a draft whose planned date is in the future; `PATCH /social-posts/:id` and `POST /social-posts/:id/unschedule` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
+| `POST /social-posts` without `scheduledAt` or with a past one; `POST /social-posts/:id/publish` with a past `scheduledAt`, with `publishNow: true`, or without either on a post that has no future planned date; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
 | `DELETE /social-posts/:id` on a post that is not a `DRAFT`; `DELETE /recurring-posts/:id` | `posts.delete` | admin, editor |
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
@@ -182,7 +182,7 @@ Returns `404` when the account is not found or is not a Pinterest account in thi
 
 Create or schedule a post to one or more social media platforms.
 
-A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also needs `posts.schedule`, and a post that publishes now also needs `posts.publish`; without it the call answers `403 permission_denied`.
+A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned date. A future `scheduledAt` also needs `posts.schedule`, and a post that publishes now also needs `posts.publish`; without it the call answers `403 permission_denied`.
 
 **Request:**
 
@@ -227,7 +227,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`. A future `scheduledAt` also n
 - `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
 - `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
 - `twitterKeepLinks` (boolean): Keep links in the X text clickable. See [Links on X](#links-on-x)
-- `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately
+- `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately. With `saveAsDraft: true` it is the draft's planned date: the post stays a `DRAFT`, and `POST /social-posts/:id/publish` without `scheduledAt` schedules it for that date
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
 - `recurrence` (object): Repeats the post. See [Recurrence](#recurrence) below
 - `pageIds` (string[]): Facebook page account `id` values from `/social-accounts` (the account's `pageId` value is accepted too)
@@ -345,7 +345,7 @@ Only `POST /social-posts` takes `recurrence`. `PATCH /social-posts/:id`, bulk it
 
 `recurringPostId` is only present when the request carried `recurrence`; `postId` is then the first post of the series.
 
-`queuedPlatforms` confirms that publishing jobs were queued, not that they succeeded: each platform publishes asynchronously and on its own, so read `GET /social-posts/:id/results` for the outcome. A future `scheduledAt` returns `isScheduled: true` with status `SCHEDULED`; a missing or past `scheduledAt` publishes immediately with status `PENDING`; `saveAsDraft: true` stores a `DRAFT`.
+`queuedPlatforms` confirms that publishing jobs were queued, not that they succeeded: each platform publishes asynchronously and on its own, so read `GET /social-posts/:id/results` for the outcome. A future `scheduledAt` returns `isScheduled: true` with status `SCHEDULED`; a missing or past `scheduledAt` publishes immediately with status `PENDING`; `saveAsDraft: true` stores a `DRAFT`, with `scheduledAt` as its planned date when one was sent.
 
 ### GET /social-posts
 
@@ -687,7 +687,11 @@ Publish a draft, either immediately or on a schedule. Accepts a `DRAFT`, and als
 { "scheduledAt": "2026-03-15T10:00:00Z", "timezone": "UTC" }
 ```
 
-A future `scheduledAt` needs `posts.schedule` and publishing now needs `posts.publish`, so a key that holds only `posts.draft` gets `403 permission_denied`. Omit `scheduledAt` (or pass a past time) to publish now: the post moves to `PENDING`, a publishing job is queued per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. A future `scheduledAt` sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
+- `scheduledAt` (string, optional): schedules the post for that time instead of the draft's planned date. A past time publishes now.
+- `timezone` (string, required)
+- `publishNow` (boolean, optional): publishes now even when the draft has a planned date. Sending it with `scheduledAt` returns `400` `Send either scheduledAt or publishNow, not both`.
+
+Without `scheduledAt`, a draft whose planned date is in the future is scheduled for that date, and any other post publishes now. Scheduling needs `posts.schedule` and publishing now needs `posts.publish`, so a key that holds only `posts.draft` gets `403 permission_denied`. Publishing now moves the post to `PENDING`, clears its stored `scheduledAt`, queues a publishing job per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. Scheduling sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
 
 **Response:** `{ "postId", "queuedPlatforms", "isScheduled", "scheduledAt" }`. Read `GET /social-posts/:id/results` afterwards for the per-platform outcome.
 

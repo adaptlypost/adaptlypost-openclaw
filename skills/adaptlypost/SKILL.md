@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile and Telegram accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.25.0
+version: 1.26.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -57,9 +57,9 @@ A key carries the workspace role chosen when it was created, and never does more
 | `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, create or change recurring posts, delete anything but its own drafts, touch other members' posts, manage webhooks |
 | `viewer` | Read posts, accounts, analytics, webhooks | Any write |
 
-`POST /social-posts` and `POST /social-posts/:id/publish` check the role per call. A draft needs `posts.draft`. A future `scheduledAt` also needs `posts.schedule`, and publishing now also needs `posts.publish`. `GET /me` returns the key's `role` and `can: { draft, schedule, publish }`, so check it before asking the user for a time.
+`POST /social-posts` and `POST /social-posts/:id/publish` check the role per call. A draft needs `posts.draft`, with or without a planned date. A future `scheduledAt` also needs `posts.schedule`, and publishing now also needs `posts.publish`. On `/publish` without `scheduledAt`, a draft's own future planned date counts as the scheduled time, so that call needs `posts.schedule`. `GET /me` returns the key's `role` and `can: { draft, schedule, publish }`, so check it before asking the user for a time.
 
-Once a write answers `403` with `requiredPermission` `posts.schedule` or `posts.publish`, every later post goes out with `saveAsDraft: true` and no `scheduledAt`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. Do not ask for a scheduled time you cannot use.
+Once a write answers `403` with `requiredPermission` `posts.schedule` or `posts.publish`, every later post goes out with `saveAsDraft: true`, and you tell the user a workspace member has to publish it in the AdaptlyPost app. A time the user already gave can go along as `scheduledAt`: the draft keeps it as its planned date, and publishing the draft without a new time schedules it for that date. Do not ask for a scheduled time you cannot use.
 
 A call the role does not cover answers `403` with this body:
 
@@ -176,7 +176,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 ### 4. Save a post as draft (no scheduling)
 
-Same as scheduling, but set `saveAsDraft: true` and omit `scheduledAt`:
+Same as scheduling, but set `saveAsDraft: true`. Omit `scheduledAt` for an undated draft:
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
@@ -191,6 +191,8 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
     "instagramConnectionIds": ["CONNECTION_ID_HERE"]
   }'
 ```
+
+To give the draft a planned date, send `scheduledAt` together with `saveAsDraft: true`. The post stays a `DRAFT` and stores that date, and nothing goes out until the draft is published (step 11). This needs only `posts.draft`, so a Contributor key can do it.
 
 ### 5. Schedule a post with media (3-step flow)
 
@@ -333,7 +335,8 @@ Read the error before retrying. A rejected token or bad media is worth another a
 curl -X PATCH  .../social-posts/POST_ID   -d '{"text": "Revised copy"}'
 curl -X DELETE .../social-posts/POST_ID
 curl -X POST   .../social-posts/POST_ID/unschedule
-curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z"}'
+curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T10:00:00Z", "timezone": "UTC"}'
+curl -X POST   .../social-posts/POST_ID/publish -d '{"timezone": "UTC", "publishNow": true}'
 ```
 
 `PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId` or `boardName`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
@@ -344,7 +347,13 @@ Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns 
 
 `DELETE` removes the record from AdaptlyPost, and a deleted scheduled post will not publish. It never removes content already on a network: deleting a `COMPLETED` post only drops AdaptlyPost's record, and removing the live post is a manual step per platform. Prefer `PATCH` over delete-and-recreate.
 
-`POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. A future `scheduledAt` needs `posts.schedule` and publishing now needs `posts.publish`, so a Contributor key gets `403 permission_denied` here. Omit `scheduledAt` (or pass a past time) and the post moves to `PENDING` with a publishing job queued per platform, so the content reaches the networks within moments and cannot be recalled. A future `scheduledAt` sets `SCHEDULED` and queues nothing yet. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
+`POST .../publish` accepts a `DRAFT` (or a `SCHEDULED` post, to reschedule it or push it live); any other status returns `400` `Post is not a draft`. The body is `{ scheduledAt?, timezone, publishNow? }`:
+
+- With `scheduledAt`: the post is scheduled for that time. A past time publishes now.
+- Without `scheduledAt`: a draft whose planned date is in the future is scheduled for that date. Otherwise it publishes now.
+- `publishNow: true` publishes now even when the draft has a planned date. Sending it with `scheduledAt` returns `400`.
+
+Scheduling needs `posts.schedule` and publishing now needs `posts.publish`, so a Contributor key gets `403 permission_denied` here. Publishing now moves the post to `PENDING` with a publishing job queued per platform, clears its stored `scheduledAt`, and the content reaches the networks within moments and cannot be recalled. Scheduling sets `SCHEDULED` and queues nothing yet. Read `isScheduled` and `scheduledAt` in the response to see which one happened. It fails if an account on the draft was disconnected or a TikTok entry lacks `privacyLevel`; fix that with `PATCH` first. Publishing a draft is subject to the same four-item confirmation as any other post.
 
 ### 12. Repeat a post on a schedule
 
@@ -685,7 +694,8 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - For multi-post sessions, schedule a **small first batch (1–3)** and confirm before queuing the rest. A single mistake otherwise propagates across every queued post.
 - If the user says "post now", "publish now", or "right away": **completely omit `scheduledAt` from the request body** — do NOT set it to a time in the near future. The API publishes immediately when `scheduledAt` is absent.
 - If the user says "schedule": ask for the date and time, then set `scheduledAt` to an ISO 8601 timestamp.
-- If the user says "draft": set `saveAsDraft: true` and omit `scheduledAt`.
+- If the user says "draft": set `saveAsDraft: true`. Omit `scheduledAt` unless they give a planned date for the draft.
+- If the user says "publish this draft now": send `publishNow: true` to `/publish`, or a draft with a future planned date gets scheduled for that date instead.
 - If the user says "every Monday", "daily", "each month" or "every year": ask for the first date and time and for when it stops (an end date, a number of posts, or never), then send `recurrence` with a future `scheduledAt` (step 12). A recurring post cannot be a draft.
 
 ### Timezone handling
@@ -699,7 +709,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 
 - Always call `/social-accounts` first to get valid connection IDs for each platform.
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
-- `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. Omit it when using `saveAsDraft: true`.
+- `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. With `saveAsDraft: true` it is the draft's planned date and the post stays a draft.
 - `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
 - Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - Telegram takes text up to 4096 characters, up to 10 images or one video up to 50 MB; a caption over 1024 characters is sent as its own message after the media.
@@ -715,7 +725,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - To find problems before anything is created, send the same body to `POST /social-posts/validate` (or `/social-posts/bulk/validate`) and fix every `ERROR` in the report (step 16).
 - Creating, publishing, and retrying only confirm queueing. Read `GET /social-posts/:id/results` for the per-platform outcome, and poll while rows are `PENDING` or `PUBLISHING`.
 - To change a draft's media, `PATCH` with `platforms`, the connection-id arrays, and `mediaUrls` together; `mediaUrls` alone is ignored.
-- Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`.
+- Before `POST .../publish`, `GET /social-posts/:id` to confirm the draft's accounts are still connected and every TikTok entry carries `privacyLevel`, and read its `scheduledAt`. A draft with a future planned date is scheduled for it unless you send `scheduledAt` or `publishNow: true`, so tell the user which one will happen.
 - Retry only `FAILED` rows, by `platformId` from the results endpoint, and only after the cause is fixed.
 - For performance questions use `/analytics/*` with an explicit window (step 15); `/results` is delivery status, not reach. A `null` metric means the platform does not report it.
 - On `403 permission_denied`, stop and report `message` and `requiredPermission`. A retry, another key of the same role or another endpoint gets the same answer.

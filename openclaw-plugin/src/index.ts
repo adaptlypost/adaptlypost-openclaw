@@ -523,12 +523,12 @@ const PostParameters = Type.Object({
   ),
   mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
     description:
-      "DRAFT: save without publishing. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",
+      "DRAFT: save without publishing; a scheduledAt is kept as the draft's planned date and nothing is scheduled. SCHEDULE: publish at scheduledAt. PUBLISH_NOW: publish immediately. SCHEDULE and PUBLISH_NOW require user approval.",
   }),
   scheduledAt: Type.Optional(
     Type.String({
       description:
-        "Absolute ISO 8601 instant in the future. Required with mode SCHEDULE, rejected with the other modes.",
+        "Absolute ISO 8601 instant. Required with mode SCHEDULE, where it must be in the future. Optional with mode DRAFT, where it is the draft's planned date: the post stays a draft, and publishing it in the AdaptlyPost app schedules it for that date. Rejected with PUBLISH_NOW.",
     }),
   ),
   timezone: Type.Optional(
@@ -770,8 +770,7 @@ export default definePluginEntry({
         if (post.mode !== "DRAFT") {
           const { fallback } = approvals.consume(toolCallId, CREATE_POST_TOOL, params);
           if (fallback === "draft") {
-            const { scheduledAt: _scheduledAt, ...rest } = post;
-            body = buildPostBody({ ...rest, mode: "DRAFT" });
+            body = buildPostBody({ ...post, mode: "DRAFT" });
             savedAsDraft = true;
           }
         }

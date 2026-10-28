@@ -258,10 +258,11 @@ export function buildPostBody(params: Record<string, unknown>): Record<string, u
 
   switch (mode) {
     case "DRAFT":
-      if (scheduledAt !== undefined) {
-        throw new Error("mode DRAFT cannot carry scheduledAt. Drop scheduledAt, or use mode SCHEDULE.");
+      if (scheduledAt === undefined) return { ...rest, saveAsDraft: true };
+      if (!nonEmpty(scheduledAt) || Number.isNaN(Date.parse(scheduledAt))) {
+        throw new Error(`scheduledAt "${String(scheduledAt)}" is not a valid ISO 8601 instant.`);
       }
-      return { ...rest, saveAsDraft: true };
+      return { ...rest, scheduledAt, saveAsDraft: true };
     case "SCHEDULE": {
       if (!nonEmpty(scheduledAt)) throw new Error("mode SCHEDULE needs scheduledAt as an ISO 8601 instant.");
       const at = Date.parse(scheduledAt);
