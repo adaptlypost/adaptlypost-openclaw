@@ -498,7 +498,6 @@ const FirstComment = Type.Object({
   platform: Type.Union([
     Type.Literal("LINKEDIN"),
     Type.Literal("TWITTER"),
-    Type.Literal("THREADS"),
     Type.Literal("BLUESKY"),
     Type.Literal("MASTODON"),
     Type.Literal("YOUTUBE"),
@@ -509,7 +508,7 @@ const FirstComment = Type.Object({
     minLength: 1,
     maxLength: 10000,
     description:
-      "Comment text. Limits: LINKEDIN 1250, TWITTER 280, THREADS 500, BLUESKY 300, MASTODON 500, YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200 characters.",
+      "Comment text. Limits: LINKEDIN 1250, TWITTER 280, BLUESKY 300, MASTODON 500, YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200 characters.",
   }),
 });
 
@@ -583,7 +582,7 @@ const PostParameters = Type.Object({
   firstComments: Type.Optional(
     Type.Array(FirstComment, {
       description:
-        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
+        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Bluesky and Mastodon. The platform must be in platforms. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
     }),
   ),
   mediaUrls: Type.Optional(

@@ -289,7 +289,6 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 | --- | --- | --- |
 | `LINKEDIN` | comment | 1250 |
 | `TWITTER` | reply | 280 |
-| `THREADS` | reply | 500 |
 | `BLUESKY` | reply | 300 |
 | `MASTODON` | reply | 500 |
 | `YOUTUBE` | comment | 10000 |
