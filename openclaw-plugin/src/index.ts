@@ -37,11 +37,13 @@ const POSTABLE_PLATFORMS = [
   Type.Literal("MASTODON"),
   Type.Literal("GOOGLE_BUSINESS"),
   Type.Literal("TELEGRAM"),
+  Type.Literal("TUMBLR"),
+  Type.Literal("WORDPRESS"),
 ];
 
 const Platform = Type.Union(POSTABLE_PLATFORMS, {
   description:
-    "AdaptlyPost platform identifier. GOOGLE_BUSINESS is Google Business Profile; TELEGRAM is a Telegram channel or group.",
+    "AdaptlyPost platform identifier. GOOGLE_BUSINESS is Google Business Profile; TELEGRAM is a Telegram channel or group; TUMBLR is a Tumblr blog; WORDPRESS is a self-hosted WordPress site.",
 });
 
 const PostStatus = Type.Union([
@@ -128,7 +130,7 @@ const AnalyticsRangeFields = {
   platforms: Type.Optional(
     Type.Array(Platform, {
       description:
-        "Restrict to these platforms; omit for every platform with analytics. MASTODON and TELEGRAM have none and are ignored.",
+        "Restrict to these platforms; omit for every platform with analytics. MASTODON, TELEGRAM, TUMBLR and WORDPRESS have none and are ignored.",
     }),
   ),
 };
@@ -155,6 +157,18 @@ const ConnectionIdFields = {
         "Telegram channel and group ids from adaptlypost_accounts (platform TELEGRAM, displayName is the chat title). Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message after the media.",
     }),
   ),
+  tumblrConnectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "Tumblr blog ids from adaptlypost_accounts (platform TUMBLR). Text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video up to 500 MB and 10 minutes. tumblrConfigs adds tags, a title and a source link.",
+    }),
+  ),
+  wordpressConnectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        "WordPress site ids from adaptlypost_accounts (platform WORDPRESS). The text becomes the body of a published blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable. Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video up to 500 MB; the first image is the featured image and the other images or the video follow the text. A site without a wordpressConfigs entry uses the first line of the text as the title.",
+    }),
+  ),
   pageIds: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -175,6 +189,12 @@ const PlatformConfigFields = {
           Type.Literal("SELF_ONLY"),
         ]),
         title: Type.Optional(Type.String({ maxLength: 90 })),
+        caption: Type.Optional(
+          Type.String({
+            maxLength: 4000,
+            description: "TikTok caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post.",
+          }),
+        ),
         sendAsDraft: Type.Optional(Type.Boolean()),
         aiGenerated: Type.Optional(Type.Boolean()),
       }),
@@ -196,6 +216,15 @@ const PlatformConfigFields = {
             description:
               'Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts. Omit it or send false for no label.',
           }),
+        ),
+        defaultAudioLanguage: Type.Optional(
+          Type.Union(
+            [Type.String({ maxLength: 35, pattern: "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$" }), Type.Null()],
+            {
+              description:
+                "Language spoken in the video's original audio, as a BCP-47 tag such as en, pt-BR or es-419, so YouTube does not treat it as another language. null clears a saved value. It does not turn off YouTube's automatic dubbing.",
+            },
+          ),
         ),
       }),
       { description: "YouTube uploads without a videoTitle publish under the caption text." },
@@ -369,6 +398,53 @@ const PlatformConfigFields = {
       }),
     ),
   ),
+  tumblrConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String({ description: "A blog id from tumblrConnectionIds." }),
+        tags: Type.Optional(
+          Type.Array(Type.String({ maxLength: 140, pattern: "^[^,]+$" }), {
+            maxItems: 30,
+            description: "Tumblr tags, without commas. A leading # is stripped and duplicates are dropped, ignoring case.",
+          }),
+        ),
+        title: Type.Optional(Type.String({ maxLength: 4096, description: "Shown as a heading above the media and the text." })),
+        sourceUrl: Type.Optional(Type.String({ maxLength: 2048, description: "Shown as the source link of the post." })),
+      }),
+      { description: "Tumblr per-blog options. connectionId must match an entry in tumblrConnectionIds." },
+    ),
+  ),
+  wordpressConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String({ description: "A site id from wordpressConnectionIds." }),
+        title: Type.Optional(
+          Type.String({
+            maxLength: 300,
+            description: "Post title. Defaults to the first line of the text, cut to 100 characters.",
+          }),
+        ),
+        excerpt: Type.Optional(
+          Type.String({ maxLength: 1000, description: "Summary WordPress shows in post lists and feeds." }),
+        ),
+        categoryIds: Type.Optional(
+          Type.Array(Type.Integer({ minimum: 1 }), {
+            maxItems: 50,
+            description:
+              "Category ids from adaptlypost_list_wordpress_categories for this site. Omitted, WordPress files the post under the site's default category.",
+          }),
+        ),
+        tags: Type.Optional(
+          Type.Array(Type.String({ maxLength: 100 }), {
+            maxItems: 50,
+            description:
+              "Tag names. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise.",
+          }),
+        ),
+      }),
+      { description: "WordPress per-site options. connectionId must match an entry in wordpressConnectionIds." },
+    ),
+  ),
   googleBusinessConfigs: Type.Optional(
     Type.Array(
       Type.Object({
@@ -450,14 +526,14 @@ const PlatformThumbnail = Type.Object({
   thumbnailUrl: Type.Optional(
     Type.String({
       description:
-        "Image for this platform's thumbnail: an https URL or an image data URI. YOUTUBE, FACEBOOK, LINKEDIN, TELEGRAM, INSTAGRAM and PINTEREST take one; TIKTOK does not.",
+        "Image for this platform's thumbnail: an https URL or an image data URI. YOUTUBE, FACEBOOK, INSTAGRAM, LINKEDIN, PINTEREST and TELEGRAM take one; TIKTOK does not.",
     }),
   ),
   thumbnailTimestampMs: Type.Optional(
     Type.Integer({
       minimum: 0,
       description:
-        "Video frame (ms from the start) to use instead. INSTAGRAM, PINTEREST and TIKTOK take one; the image wins when both are sent.",
+        "Video frame (ms from the start) to use instead. Every platform here takes one; the image wins when both are sent, and TIKTOK takes only a frame.",
     }),
   ),
 });
@@ -495,7 +571,7 @@ const PostParameters = Type.Object({
     ],
     {
       description:
-        "Must match the media supplied. CAROUSEL needs more than one mediaUrl. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
+        "Must match the media supplied. CAROUSEL needs more than one mediaUrl: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
     },
   ),
   text: Type.Optional(Type.String({ description: "Default caption shared across platforms." })),
@@ -518,7 +594,7 @@ const PostParameters = Type.Object({
   mediaAltTexts: Type.Optional(
     Type.Array(Type.String({ maxLength: 1000 }), {
       description:
-        'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube, Telegram and videos ignore it.',
+        'Alt text per image, in the same order as mediaUrls; use "" to skip an image. Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads; Pinterest uses the first one (cut to 500 characters). TikTok, YouTube, Telegram and videos ignore it.',
     }),
   ),
   mode: Type.Union([Type.Literal("DRAFT"), Type.Literal("SCHEDULE"), Type.Literal("PUBLISH_NOW")], {
@@ -547,7 +623,7 @@ const PostParameters = Type.Object({
     Type.Integer({
       minimum: 0,
       description:
-        "Video frame (ms) to use as the thumbnail on INSTAGRAM, PINTEREST and TIKTOK unless platformThumbnails overrides it.",
+        "Video frame (ms) to use as the thumbnail on every platform that takes one: YOUTUBE, FACEBOOK, INSTAGRAM, LINKEDIN, PINTEREST, TELEGRAM and TIKTOK. A thumbnailUrl sent with it wins everywhere except TIKTOK, and platformThumbnails overrides both.",
     }),
   ),
   platformThumbnails: Type.Optional(
@@ -577,7 +653,7 @@ export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile and Telegram, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress, and read how they performed.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -618,7 +694,7 @@ export default definePluginEntry({
       name: "adaptlypost_accounts",
       label: "AdaptlyPost: list accounts",
       description:
-        "List the social accounts connected to the token's workspace across all twelve platforms you can post to. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram accounts. For a Pinterest account, adaptlypost_list_pinterest_boards returns the boards it can pin to. A Google Business Profile account (platform GOOGLE_BUSINESS) is one location: displayName is its title and username is empty. A Telegram account (platform TELEGRAM) is a channel or group: displayName is the chat title, username is its public @username without the @ (empty for a private chat) and avatarUrl is empty. A Telegram chat can only be connected in the AdaptlyPost app, not through this plugin. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds, Google Business Profile locations in googleBusinessConnectionIds, Telegram chats in telegramConnectionIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
+        "List the social accounts connected to the token's workspace across all fourteen platforms you can post to. Returns { accounts } with id, platform, displayName, username, avatarUrl, status, pageId for Facebook pages, and supportsInstagramAudio for Instagram accounts. For a Pinterest account, adaptlypost_list_pinterest_boards returns the boards it can pin to; for a WordPress site, adaptlypost_list_wordpress_categories returns its categories. A Google Business Profile account (platform GOOGLE_BUSINESS) is one location: displayName is its title and username is empty. A Telegram account (platform TELEGRAM) is a channel or group: displayName is the chat title, username is its public @username without the @ (empty for a private chat) and avatarUrl is empty. A Telegram chat, Tumblr blog or WordPress site can only be connected in the AdaptlyPost app, not through this plugin. Call this before adaptlypost_create_post: it takes these ids, never usernames. Put each id in the array for its platform (linkedinConnectionIds, tiktokConnectionIds, and so on); Facebook page accounts go in pageIds, Google Business Profile locations in googleBusinessConnectionIds, Telegram chats in telegramConnectionIds, Tumblr blogs in tumblrConnectionIds, WordPress sites in wordpressConnectionIds. status is active or unauthorized; an unauthorized account stays listed but its platform rejected the stored token (unauthorizedReason says why) and adaptlypost_create_post refuses it with 400, so skip it and tell the user to reconnect it in the dashboard, then adaptlypost_check_account to confirm. Not for post history or publishing status: use adaptlypost_list_posts or adaptlypost_post_results for those. Takes no arguments.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/social-accounts", { signal }));
@@ -716,6 +792,26 @@ export default definePluginEntry({
     });
 
     api.registerTool({
+      name: "adaptlypost_list_wordpress_categories",
+      label: "AdaptlyPost: list WordPress categories",
+      description:
+        "List the categories of a connected WordPress site, sorted by name. Returns { categories } with id, name and parentId (null for a top-level category). Call it when the user names categories for a WordPress post, match the names to ids, and pass those ids as wordpressConfigs[].categoryIds in adaptlypost_create_post. Categories belong to one site, so call it once per WordPress account. A post sent without categoryIds goes to the site's default category. Fails with 404 when account_id is not a WordPress account in the token's workspace, and with an error carrying the reason when the site refuses the request or cannot be reached, which may mean the user must reconnect the site in the AdaptlyPost app. Nothing is posted.",
+      parameters: Type.Object({
+        account_id: Type.String({
+          description: "WordPress account id from adaptlypost_accounts.",
+        }),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const { account_id: accountId } = params as { account_id: string };
+        return jsonResult(
+          await callApi(cfg(), "GET", `/social-accounts/${encodeURIComponent(accountId)}/wordpress-categories`, {
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
       name: UPLOAD_TOOL,
       label: "AdaptlyPost: upload media",
       description:
@@ -761,7 +857,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image thumbnail through platformThumbnails. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Tumblr (TUMBLR) takes tags, a title and a source link through tumblrConfigs. WordPress (WORDPRESS) publishes the text as a blog post; set the title, excerpt, categories (ids from adaptlypost_list_wordpress_categories) and tags with wordpressConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image or a frame as its thumbnail through platformThumbnails. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, Tumblr and WordPress titles, categories and tags, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: PostParameters,
       async execute(toolCallId, params, signal) {
         const post = params as Record<string, unknown> & { mode: string };

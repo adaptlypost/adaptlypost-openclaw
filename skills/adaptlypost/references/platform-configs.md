@@ -1,6 +1,6 @@
 # Platform-Specific Configs Reference
 
-Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs` included), except `linkedinConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take (bulk cannot carry `DOCUMENT` posts). Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
+Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs`, `tumblrConfigs` and `wordpressConfigs` included), except `linkedinConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take (bulk cannot carry `DOCUMENT` posts). Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
 
 For bulk scheduling, configs can be set at two levels:
 - **Batch-level** (top-level request body) — applied to all posts as the default
@@ -34,7 +34,7 @@ For bulk scheduling, configs can be set at two levels:
 | `connectionId` | string | **yes** | TikTok account connection ID |
 | `privacyLevel` | string | **yes** | `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY` |
 | `title` | string | no | Video title (max 90 chars) |
-| `caption` | string | no | Extended caption (max 2,200 chars) |
+| `caption` | string | no | TikTok caption: max 2,200 characters on a video, 4,000 on a photo or photo carousel post |
 | `allowComments` | boolean | no | Allow comments on the video |
 | `allowDuet` | boolean | no | Allow duets |
 | `allowStitch` | boolean | no | Allow stitches |
@@ -48,7 +48,7 @@ For bulk scheduling, configs can be set at two levels:
 
 - Video: MP4/MOV, H.264, max 250MB, 3s-10min. Best: 15-30s, 1080x1920 (9:16)
 - Carousels: 2-35 images (photo slideshows)
-- Caption: max 2,200 characters
+- Caption: max 2,200 characters on a video, 4,000 on a photo post
 
 ## Instagram — `instagramConfigs`
 
@@ -189,6 +189,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
       "allowEmbedding": true,
       "madeForKids": false,
       "aiGenerated": false,
+      "defaultAudioLanguage": "pt-BR",
       "categoryId": "22",
       "playlistId": "PLxxxxxxxx"
     }
@@ -208,6 +209,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `allowEmbedding` | boolean | no | Allow embedding on other sites |
 | `madeForKids` | boolean | no | COPPA compliance flag |
 | `aiGenerated` | boolean | no | Disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Sets `status.containsSyntheticMedia`. Omit it or send `false` for no label. Works on videos and Shorts |
+| `defaultAudioLanguage` | string or null | no | Language spoken in the video's original audio, as a BCP-47 tag such as `en`, `pt-BR` or `es-419` (max 35 chars), so YouTube does not treat it as another language. `null` clears a saved value. Does not turn off YouTube's automatic dubbing |
 | `categoryId` | string | no | YouTube category ID |
 | `playlistId` | string | no | Add to playlist after publishing |
 
@@ -314,6 +316,71 @@ One entry per location in `googleBusinessConnectionIds`. A location without an e
 - No alt text
 - Analytics report location-level impressions only; posts have no per-post numbers
 
+## Tumblr — `tumblrConfigs`
+
+```json
+{
+  "tumblrConfigs": [
+    {
+      "connectionId": "tumblr-connection-id",
+      "tags": ["lookbook", "autumn"],
+      "title": "Autumn lookbook",
+      "sourceUrl": "https://example.com/autumn"
+    }
+  ]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | Tumblr blog `id` from `/social-accounts`, also in `tumblrConnectionIds` |
+| `tags` | string[] | no | Up to 30 tags, without commas (max 140 chars each). A leading `#` is stripped and duplicates are dropped, ignoring case |
+| `title` | string | no | Shown as a heading above the media and the text (max 4,096 chars) |
+| `sourceUrl` | string | no | Shown as the source link of the post (max 2,048 chars) |
+
+**Media notes:**
+
+- `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`
+- Text up to 32,768 characters
+- Up to 30 JPEG, PNG or GIF images (10 MB each), or one MP4 video up to 500 MB and 10 minutes
+- Alt text supported
+- No first comments, threads, thumbnails, image shapes or analytics
+
+## WordPress — `wordpressConfigs`
+
+```json
+{
+  "wordpressConfigs": [
+    {
+      "connectionId": "wordpress-connection-id",
+      "title": "The autumn collection",
+      "excerpt": "Every piece of the new season in one place.",
+      "categoryIds": [12],
+      "tags": ["autumn", "new"]
+    }
+  ]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | WordPress site `id` from `/social-accounts`, also in `wordpressConnectionIds` |
+| `title` | string | no | Post title (max 300 chars). Defaults to the first line of the text, cut to 100 characters |
+| `excerpt` | string | no | Summary WordPress shows in post lists and feeds (max 1,000 chars) |
+| `categoryIds` | integer[] | no | Up to 50 category ids from `GET /social-accounts/:id/wordpress-categories`. Omitted, WordPress files the post under the site's default category |
+| `tags` | string[] | no | Up to 50 tag names (max 100 chars each). A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
+
+**Media notes:**
+
+- The text becomes the body of a published blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable
+- `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`
+- Up to 20 JPEG, PNG, WebP or GIF images (20 MB each), or one MP4 or MOV video up to 500 MB
+- The first image is the featured image; the other images or the video follow the text
+- Alt text is sent to WordPress
+- A site that answers 401 or 403 is marked for reconnect
+- No first comments, threads, thumbnails, image shapes or analytics
+- The site (WordPress 5.6 or later, over HTTPS) is connected in the AdaptlyPost app on the Connectors page
+
 ## Platforms Without Config Objects
 
 These platforms use only connection ID arrays — no additional config:
@@ -366,6 +433,6 @@ These platforms use only connection ID arrays — no additional config:
 - Character limit: 4,096
 - Up to 10 images (JPEG, PNG or WebP, 10 MB each), or one MP4 or MOV video up to 50 MB
 - A caption over 1,024 characters goes out as its own message right after the media
-- A video takes an image thumbnail (`platformThumbnails` with `thumbnailUrl`)
+- A video takes an image or a video frame as its thumbnail (`platformThumbnails` with `thumbnailUrl` or `thumbnailTimestampMs`)
 - No alt text, first comments, threads, image shapes or analytics
 - Connecting a chat happens in the AdaptlyPost app: add the AdaptlyPost bot to the channel or group and send it the connect code from the Connectors page

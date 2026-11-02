@@ -1,8 +1,8 @@
 # AdaptlyPost plugin for OpenClaw
 
 Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok,
-YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile and
-Telegram, from inside OpenClaw.
+YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile,
+Telegram, Tumblr and WordPress, from inside OpenClaw.
 
 ## Install
 
@@ -115,6 +115,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_remove_account` | Disconnect an account from the workspace, unauthorized ones included. Admin keys only. Needs approval. |
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
+| `adaptlypost_list_wordpress_categories` | List the categories of a WordPress site, to pass their ids as `wordpressConfigs[].categoryIds`. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_validate_post` | Check a post without creating it. Takes the same parameters as `adaptlypost_create_post` and returns each account's status, the issues to fix and what only the platform can decide. Needs no approval. |
@@ -161,9 +162,16 @@ update; set `topicType` to `EVENT` or `OFFER` for an event or offer, and
 Telegram channels and groups go in `telegramConnectionIds`. A post there is
 text up to 4096 characters, up to 10 JPEG, PNG or WebP images of 10 MB each, or
 one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as
-its own message after the media, and a video takes an image thumbnail through
-`platformThumbnails`. A Telegram chat is connected in the AdaptlyPost app, on
+its own message after the media, and a video takes an image or a frame as its
+thumbnail through `platformThumbnails`. A Telegram chat is connected in the AdaptlyPost app, on
 the Connectors page, not through the plugin.
+
+Tumblr blogs go in `tumblrConnectionIds`, and `tumblrConfigs` adds tags, a
+title and a source link. WordPress sites go in `wordpressConnectionIds`: the
+text becomes the body of a published blog post, the first image is the
+featured image, and `wordpressConfigs` sets the title, excerpt, categories and
+tags. Find category ids with `adaptlypost_list_wordpress_categories`. Both are
+connected in the AdaptlyPost app.
 
 `firstComments` adds a comment from the same account right after the post goes
 out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Threads,
@@ -205,8 +213,8 @@ not clear it. A dead token or rejected media will.
 
 Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky,
 YouTube, X, LinkedIn and Google Business Profile. Google Business Profile
-reports how often the location was seen, with no numbers per post. Mastodon and
-Telegram have no analytics, so they come back empty. Connecting an account
+reports how often the location was seen, with no numbers per post. Mastodon,
+Telegram, Tumblr and WordPress have no analytics, so they come back empty. Connecting an account
 imports its posts from the last 180 days, and analytics are kept from then on
 while it stays connected. A `null` metric means
 the platform does not report it, which is not the same as zero.

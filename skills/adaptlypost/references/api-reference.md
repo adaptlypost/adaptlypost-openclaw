@@ -28,7 +28,7 @@ Which permission each endpoint needs:
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts` | `accounts.read` | all |
-| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
+| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `GET /social-accounts/:id/wordpress-categories`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
@@ -71,7 +71,7 @@ List all connected social media accounts for the account group tied to this API 
 }
 ```
 
-Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`, `TELEGRAM`
+Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKEDIN`, `THREADS`, `BLUESKY`, `MASTODON`, `PINTEREST`, `GOOGLE_BUSINESS`, `TELEGRAM`, `TUMBLR`, `WORDPRESS`
 
 **Notes:**
 
@@ -83,6 +83,8 @@ Platform values: `TIKTOK`, `INSTAGRAM`, `FACEBOOK`, `TWITTER`, `YOUTUBE`, `LINKE
 - Google Business Profile accounts (`GOOGLE_BUSINESS`) are business locations: `displayName` is the location title and `username` is empty. Pass the `id` in `googleBusinessConnectionIds`
 - Instagram accounts carry `supportsInstagramAudio`: `true` when the account was connected through Facebook, which adding Instagram audio to Reels needs
 - Telegram accounts (`TELEGRAM`) are channels and groups: `displayName` is the chat title, `username` is the public @username without the `@` (empty for a private chat) and `avatarUrl` is empty. Pass the `id` in `telegramConnectionIds`. The API cannot connect a Telegram chat; the user adds the AdaptlyPost bot to the chat and sends it the connect code from the Connectors page in the app
+- Tumblr accounts (`TUMBLR`) are blogs; pass the `id` in `tumblrConnectionIds`
+- WordPress accounts (`WORDPRESS`) are self-hosted WordPress sites (5.6 or later, over HTTPS); pass the `id` in `wordpressConnectionIds`. The API cannot connect a Tumblr blog or a WordPress site; the user connects them on the Connectors page in the app
 - `status` is `active` or `unauthorized`. An unauthorized account stays listed but the platform rejected its token (a locked Facebook profile, a security checkpoint, a page the user lost access to). `POST /social-posts` refuses it with a 400 until the user reconnects it in the dashboard, so skip it when scheduling and tell the user to reconnect. `unauthorizedReason` is the platform's own message. Registered webhooks receive `account.unauthorized` the moment this happens
 
 ### POST /social-accounts/:id/check
@@ -178,6 +180,25 @@ List the boards a Pinterest account can pin to, secret boards included. `:id` is
 
 Returns `404` when the account is not found or is not a Pinterest account in this workspace, and `400` when Pinterest refuses the request, usually because the account must be reconnected.
 
+### GET /social-accounts/:id/wordpress-categories
+
+List the categories of a WordPress site, sorted by name. `:id` is the WordPress account `id` from `/social-accounts`. Needs `posts.draft`.
+
+**Response:**
+
+```json
+{
+  "categories": [
+    { "id": 12, "name": "News", "parentId": null },
+    { "id": 15, "name": "Releases", "parentId": 12 }
+  ]
+}
+```
+
+`parentId` is `null` for a top-level category. Pass the chosen ids as `wordpressConfigs[].categoryIds` (see [platform-configs.md](platform-configs.md#wordpress--wordpressconfigs)). Without `categoryIds` WordPress files the post under the site's default category.
+
+Returns `404` when the account is not found or is not a WordPress account in this workspace, and an error with the reason when the site refuses the request or cannot be reached.
+
 ### POST /social-posts
 
 Create or schedule a post to one or more social media platforms.
@@ -211,8 +232,8 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 
 **Required fields:**
 
-- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`
-- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `CAROUSEL` takes 2 or more items in `mediaUrls`, up to 4 on `TWITTER`, `BLUESKY` and `MASTODON`, 5 on `PINTEREST`, 10 on `INSTAGRAM`, `FACEBOOK`, `THREADS` and `TELEGRAM`, 20 on `LINKEDIN` and 35 on `TIKTOK` (JPEG or WebP only). `INSTAGRAM` and `THREADS` mix images and videos in one carousel; the others take images only, and `YOUTUBE` has no carousel. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages). `GOOGLE_BUSINESS` takes `TEXT` or `IMAGE` only
+- `platforms` (string[]): At least one platform. Values: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`, `TUMBLR`, `WORDPRESS`
+- `contentType` (string): `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, or `DOCUMENT`. `CAROUSEL` takes 2 or more items in `mediaUrls`, up to 4 on `TWITTER`, `BLUESKY` and `MASTODON`, 5 on `PINTEREST`, 10 on `INSTAGRAM`, `FACEBOOK`, `THREADS` and `TELEGRAM`, 20 on `LINKEDIN` and `WORDPRESS`, 30 on `TUMBLR` and 35 on `TIKTOK` (JPEG or WebP only). `INSTAGRAM` and `THREADS` mix images and videos in one carousel; the others take images only, and `YOUTUBE` has no carousel. `DOCUMENT` is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX URL in `mediaUrls` (max 100 MB, 300 pages). `GOOGLE_BUSINESS` takes `TEXT` or `IMAGE` only
 - `timezone` (string): IANA timezone string (e.g., `America/New_York`, `Europe/London`). Stored with the post for display; it does not shift `scheduledAt`
 
 **Optional fields:**
@@ -220,9 +241,9 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`. The LinkedIn mention syntax works here too
 - `mediaUrls` (string[]): Public URLs of uploaded media files
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless `platformThumbnails` overrides it
-- `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on `INSTAGRAM`, `PINTEREST` and `TIKTOK` unless `platformThumbnails` overrides it
+- `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on every platform that takes one: `YOUTUBE`, `FACEBOOK`, `INSTAGRAM`, `LINKEDIN`, `PINTEREST`, `TELEGRAM` and `TIKTOK`. A `thumbnailUrl` sent with it wins everywhere except `TIKTOK`, and `platformThumbnails` overrides both
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
 - `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
 - `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
@@ -242,6 +263,8 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `youtubeConnectionIds` (string[]): YouTube account connection IDs
 - `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
 - `telegramConnectionIds` (string[]): Telegram channel and group `id` values from `/social-accounts`. Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB). A caption over 1024 characters goes out as its own message after the media
+- `tumblrConnectionIds` (string[]): Tumblr blog `id` values from `/social-accounts`. Text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video (500 MB, up to 10 minutes)
+- `wordpressConnectionIds` (string[]): WordPress site `id` values from `/social-accounts`. The text becomes the body of a published blog post (up to 100,000 characters; blank lines start new paragraphs and bare links become clickable). Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text. A site without a `wordpressConfigs` entry uses the first line of the text as the title
 - `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost"
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
@@ -249,6 +272,8 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `youtubeConfigs` (array): YouTube-specific settings per connection
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts)
 - `googleBusinessConfigs` (array): Google Business Profile settings per location: topic (update, event or offer), button, event and offer details
+- `tumblrConfigs` (array): Tumblr settings per blog: tags, a title and a source link
+- `wordpressConfigs` (array): WordPress settings per site: title, excerpt, category ids and tags
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
@@ -277,11 +302,10 @@ Any other platform returns `400`, as does a platform the post does not go to, an
 
 `platformThumbnails` gives one platform of a `VIDEO` post its own thumbnail, one entry per platform: `{ "platform", "thumbnailUrl", "thumbnailTimestampMs" }`. `thumbnailUrl` is an https URL or an image data URI; `thumbnailTimestampMs` is a video frame in ms (integer, 0 or more).
 
-- `YOUTUBE`, `FACEBOOK`, `LINKEDIN`, `TELEGRAM`: image only
-- `INSTAGRAM`, `PINTEREST`: image or frame; the image wins when both are sent
+- `YOUTUBE`, `FACEBOOK`, `INSTAGRAM`, `LINKEDIN`, `PINTEREST`, `TELEGRAM`: image or frame; the image wins when both are sent
 - `TIKTOK`: frame only
 
-A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`. Other platforms, posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use return `400`. On `PATCH`, sending the array replaces every override and leaving it out keeps the stored ones.
+A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`, which work on every platform above. Other platforms, posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use return `400`. On `PATCH`, sending the array replaces every override and leaving it out keeps the stored ones.
 
 #### Image shape per platform
 
@@ -420,9 +444,11 @@ Platform entry fields set by the newer request fields (absent when not used):
 - Image shape: `mediaAspectRatio`, `mediaAspectRatioFit`
 - Instagram: `instagramCollaborators`, `instagramUserTags` (each `{ username, x, y }`), `instagramAiGenerated` (the post carries the AI info label), `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
 - Facebook: `facebookTextFormatPresetId`, `facebookImageLayout` (`GRID` or `CAROUSEL`), `facebookCarouselCards` (each with `link`, `title`, `description`)
-- YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`)
+- YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`), `youtubeDefaultAudioLanguage`
 - X: `twitterKeepLinks`
 - Google Business Profile: `googleBusinessTopicType`, `googleBusinessCallToActionType`, `googleBusinessCallToActionUrl`, `googleBusinessEventTitle`, `googleBusinessEventStart`, `googleBusinessEventEnd`, `googleBusinessOfferCouponCode`, `googleBusinessOfferRedeemUrl`, `googleBusinessOfferTerms`
+- Tumblr: `tumblrTags`, `tumblrTitle`, `tumblrSourceUrl`
+- WordPress: `wordpressTitle`, `wordpressExcerpt`, `wordpressCategoryIds`, `wordpressTags`
 
 A story shared next to a feed post or reel (`shareToStory`) is its own platform entry with `instagramPostType` or `facebookPostType` set to `STORY`.
 
@@ -483,8 +509,8 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 
 **Optional fields (batch-level):**
 
-- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `pageIds`
-- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`
+- Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`, `pageIds`
+- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
 
 `firstComments`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`.
 
@@ -497,11 +523,11 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
 - `mediaUrls` (string[]): Media file URLs
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
-- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs` — when set on a post item, these override the batch-level configs for that specific post
+- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
 
@@ -947,7 +973,7 @@ AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per atte
 
 ## Analytics
 
-Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`, `TWITTER`, `LINKEDIN`, `GOOGLE_BUSINESS`. `GOOGLE_BUSINESS` reports only location-level impressions (how often the location was seen); its posts are listed with every per-post metric `null`. `MASTODON` and `TELEGRAM` have no analytics and are ignored by every filter.
+Post performance for the connected accounts. Covered platforms: `FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `PINTEREST`, `BLUESKY`, `YOUTUBE`, `TWITTER`, `LINKEDIN`, `GOOGLE_BUSINESS`. `GOOGLE_BUSINESS` reports only location-level impressions (how often the location was seen); its posts are listed with every per-post metric `null`. `MASTODON`, `TELEGRAM`, `TUMBLR` and `WORDPRESS` have no analytics and are ignored by every filter.
 
 Connecting an account imports its posts from the last 180 days, and less for accounts whose platform exposes less; `historyHorizonAt` on the sync status says how far. Analytics are kept from then on while the account stays connected, so any date range in that history can be queried. A post keeps refreshing for 180 days after it is published, then holds its last numbers. Weekly buckets and day boundaries follow the workspace defaults.
 
@@ -1122,7 +1148,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 ## Enums
 
 **PlatformType:**
-`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`
+`FACEBOOK`, `INSTAGRAM`, `THREADS`, `TIKTOK`, `TWITTER`, `BLUESKY`, `MASTODON`, `LINKEDIN`, `PINTEREST`, `YOUTUBE`, `GOOGLE_BUSINESS`, `TELEGRAM`, `TUMBLR`, `WORDPRESS`
 
 **ContentType:**
 `TEXT`, `IMAGE`, `VIDEO`, `CAROUSEL`, `DOCUMENT`

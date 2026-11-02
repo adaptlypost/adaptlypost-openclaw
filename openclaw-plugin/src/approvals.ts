@@ -105,6 +105,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   MASTODON: "Mastodon",
   GOOGLE_BUSINESS: "Google Business Profile",
   TELEGRAM: "Telegram",
+  TUMBLR: "Tumblr",
+  WORDPRESS: "WordPress",
 };
 
 const CONNECTION_FIELDS: Record<string, string> = {
@@ -120,6 +122,8 @@ const CONNECTION_FIELDS: Record<string, string> = {
   MASTODON: "mastodonConnectionIds",
   GOOGLE_BUSINESS: "googleBusinessConnectionIds",
   TELEGRAM: "telegramConnectionIds",
+  TUMBLR: "tumblrConnectionIds",
+  WORDPRESS: "wordpressConnectionIds",
 };
 
 type Account = {
@@ -364,6 +368,26 @@ function googleBusinessLine(entry: ConfigEntry): string {
   return `Google Business Profile: ${parts.join(", ")}`;
 }
 
+function tumblrLine(entry: ConfigEntry): string | undefined {
+  const parts: string[] = [];
+  if (nonEmpty(entry.title)) parts.push(`title "${entry.title}"`);
+  const tags = stringArray(entry.tags);
+  if (tags.length) parts.push(`tags ${tags.map((tag) => `#${tag.replace(/^#/, "")}`).join(", ")}`);
+  if (nonEmpty(entry.sourceUrl)) parts.push(`source ${entry.sourceUrl}`);
+  return parts.length ? `Tumblr: ${parts.join(", ")}` : undefined;
+}
+
+function wordpressLine(entry: ConfigEntry): string | undefined {
+  const parts: string[] = [];
+  if (nonEmpty(entry.title)) parts.push(`title "${entry.title}"`);
+  if (nonEmpty(entry.excerpt)) parts.push(`excerpt "${entry.excerpt}"`);
+  const categoryIds = Array.isArray(entry.categoryIds) ? entry.categoryIds.map(String) : [];
+  if (categoryIds.length) parts.push(`category ids ${categoryIds.join(", ")}`);
+  const tags = stringArray(entry.tags);
+  if (tags.length) parts.push(`tags ${tags.join(", ")}`);
+  return parts.length ? `WordPress: ${parts.join(", ")}` : undefined;
+}
+
 const DEFAULT_PINTEREST_BOARD = 'public "AdaptlyPost" board that is created if missing';
 
 function pinterestLines(params: Record<string, unknown>): string[] {
@@ -389,12 +413,20 @@ function settingLines(params: Record<string, unknown>): string[] {
   }
   for (const entry of configEntries(params, "youtubeConfigs")) {
     lines.push(
-      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${entry.aiGenerated === true ? ", altered or synthetic content label" : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
+      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${entry.aiGenerated === true ? ", altered or synthetic content label" : ""}${nonEmpty(entry.defaultAudioLanguage) ? `, audio language ${entry.defaultAudioLanguage}` : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
     );
   }
   for (const entry of configEntries(params, "instagramConfigs")) lines.push(instagramLine(entry));
   for (const entry of configEntries(params, "facebookConfigs")) lines.push(facebookLine(entry));
   for (const entry of configEntries(params, "googleBusinessConfigs")) lines.push(googleBusinessLine(entry));
+  for (const entry of configEntries(params, "tumblrConfigs")) {
+    const line = tumblrLine(entry);
+    if (line) lines.push(line);
+  }
+  for (const entry of configEntries(params, "wordpressConfigs")) {
+    const line = wordpressLine(entry);
+    if (line) lines.push(line);
+  }
   for (const entry of configEntries(params, "linkedinConfigs")) {
     if (nonEmpty(entry.documentTitle)) lines.push(`LinkedIn: document title "${entry.documentTitle}"`);
   }

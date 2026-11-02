@@ -1,8 +1,8 @@
 ---
 name: adaptlypost
-description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile and Telegram accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
+description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.26.0
+version: 1.27.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -17,7 +17,7 @@ metadata:
 
 # AdaptlyPost
 
-Schedule social media posts across 12 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
+Schedule social media posts across 14 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
 
 ## What this skill touches
 
@@ -114,7 +114,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
 
 Returns `{ "accounts": [{ "id", "platform", "displayName", "username", "avatarUrl", "status" }] }`. Save the `id` — you'll use it as a connection ID when creating posts.
 
-A Google Business Profile account (`platform: GOOGLE_BUSINESS`) is one business location: `displayName` is the location title and `username` is empty. Instagram accounts carry `supportsInstagramAudio`, true when the account was connected through Facebook, which Instagram audio on Reels needs. A Telegram channel or group (`platform: TELEGRAM`) has the chat title as `displayName`, its public @username without the `@` as `username` (empty for a private chat) and an empty `avatarUrl`. The API cannot connect a Telegram chat: the user does that in the AdaptlyPost app on the Connectors page, by adding the AdaptlyPost bot to the channel or group and sending it the connect code the page shows.
+A Google Business Profile account (`platform: GOOGLE_BUSINESS`) is one business location: `displayName` is the location title and `username` is empty. Instagram accounts carry `supportsInstagramAudio`, true when the account was connected through Facebook, which Instagram audio on Reels needs. A Telegram channel or group (`platform: TELEGRAM`) has the chat title as `displayName`, its public @username without the `@` as `username` (empty for a private chat) and an empty `avatarUrl`. The API cannot connect a Telegram chat: the user does that in the AdaptlyPost app on the Connectors page, by adding the AdaptlyPost bot to the channel or group and sending it the connect code the page shows. A Tumblr blog (`platform: TUMBLR`) and a self-hosted WordPress site (`platform: WORDPRESS`) are also connected in the app, on the same page; for WordPress the user approves AdaptlyPost on the site's own wp-admin or pastes an application password.
 
 `status` is `active` or `unauthorized`. An `unauthorized` account is still listed but its platform rejected the stored token (a locked Facebook profile, a security checkpoint, a page the user lost access to); `unauthorizedReason` carries the platform's message. Do not schedule to it: `POST /social-posts` refuses it with `400`. Tell the user to reconnect it in the AdaptlyPost dashboard. Once they say they have, or when a post failed with a token error and you want to confirm the page is back, run `POST /social-accounts/:id/check` to re-probe the platform now; it returns the fresh `status`. Facebook pages are also re-checked automatically twice a day. When the user would rather drop an unauthorized account than reconnect it, `DELETE /social-accounts/:id` disconnects it from the workspace (Admin keys only); confirm with the user first, because it cannot be undone and pending posts stop publishing to it. A removed Telegram chat stops getting posts, but the bot stays in the chat until someone removes it in Telegram. **This applies to Facebook too**: the `id` is what goes into `pageIds`. Facebook page accounts also show a `pageId` field, the page's public ID on facebook.com, shown because pages have no `username`. `pageIds` accepts either that `pageId` or the account `id`, so both work.
 
@@ -238,9 +238,9 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 ```
 
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
-For carousel: upload 2 or more files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`. The most a platform takes is 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos; the others take images only, and YouTube has no carousel.
+For carousel: upload 2 or more files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`. The most a platform takes is 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos; the others take images only, and YouTube has no carousel.
 For a LinkedIn document (PDF, slide deck or Word file shown as a swipeable document): upload the one file (keep its extension in `fileName`), use `contentType: "DOCUMENT"`, put that single URL in `mediaUrls`, target only `LINKEDIN`, and optionally name it with `"linkedinConfigs": [{ "connectionId": "LINKEDIN_ID", "documentTitle": "Q3 results" }]` (max 100 chars, defaults to the file name). DOCUMENT on another platform, a second file, or a document on a non-DOCUMENT post returns 400.
-For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
+For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
 For a different video thumbnail per platform: `platformThumbnails`, see [Per-platform extras](#per-platform-extras). To reframe images to one shape on Instagram or TikTok: `platformAspectRatios`, same section.
 
 ### 6. List posts
@@ -444,7 +444,7 @@ The response contains a `whsec_` signing secret, and that is the only time it is
 
 ### 15. Read the numbers
 
-Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, YouTube, X, LinkedIn and Google Business Profile. Google Business Profile reports only how often the location was seen, so its posts have no numbers of their own. Mastodon and Telegram have no analytics and return nothing. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while it stays connected, so any range in that history can be queried. A post keeps refreshing for 180 days after it is published, then holds its last numbers. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
+Analytics cover Facebook, Instagram, Threads, TikTok, Pinterest, Bluesky, YouTube, X, LinkedIn and Google Business Profile. Google Business Profile reports only how often the location was seen, so its posts have no numbers of their own. Mastodon, Telegram, Tumblr and WordPress have no analytics and return nothing. Connecting an account imports its posts from the last 180 days, and analytics are kept from then on while it stays connected, so any range in that history can be queried. A post keeps refreshing for 180 days after it is published, then holds its last numbers. Every window endpoint takes `from` and `to` (ISO 8601) and an optional repeated `platforms` filter; metrics count posts published inside the window, and every value comes with the same metric for the window of equal length just before it.
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
@@ -501,11 +501,11 @@ Pass these as config arrays in the request body. See [references/platform-config
 
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
-| **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
+| **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `caption` (up to 2200 characters on a video, 4000 on a photo post), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
 | **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `userTags` (up to 20), `aiGenerated` (AI info label), `audio` (Reels) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background), `imageLayout` and `carouselCards` (link carousel) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
-| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `playlistId` |
+| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `defaultAudioLanguage` (language of the original audio), `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`) or `boardName` (the board's name on that account), never both; with neither the pin goes to a public "AdaptlyPost" board. `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
 | **X (Twitter)** | — | No config object, uses `twitterConnectionIds`; top-level `twitterKeepLinks` keeps links clickable |
@@ -513,6 +513,8 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Mastodon** | — | No config object, uses `mastodonConnectionIds` only |
 | **Threads** | — | No config object, uses `threadsConnectionIds` only |
 | **Telegram** | — | No config object, uses `telegramConnectionIds` only |
+| **Tumblr** | `tumblrConfigs` | `tags` (up to 30, no commas), `title`, `sourceUrl` |
+| **WordPress** | `wordpressConfigs` | `title`, `excerpt`, `categoryIds` (from `GET /social-accounts/:id/wordpress-categories`), `tags` |
 
 **Example with TikTok config:**
 
@@ -569,7 +571,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 ### Telegram
 
-Put the channel or group account `id` in `telegramConnectionIds`. A Telegram post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message right after the media. A video takes an image thumbnail through `platformThumbnails` with `thumbnailUrl`. Telegram takes no first comments, image shapes or config object, and has no analytics.
+Put the channel or group account `id` in `telegramConnectionIds`. A Telegram post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB. A caption over 1024 characters goes out as its own message right after the media. A video takes an image or a video frame as its thumbnail through `platformThumbnails` (`thumbnailUrl` or `thumbnailTimestampMs`). Telegram takes no first comments, image shapes or config object, and has no analytics.
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
@@ -583,6 +585,55 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
     "timezone": "Europe/Berlin",
     "scheduledAt": "2026-10-27T09:00:00.000Z",
     "telegramConnectionIds": ["TELEGRAM_ACCOUNT_ID"]
+  }'
+```
+
+### Tumblr
+
+Put the blog's account `id` in `tumblrConnectionIds`. A Tumblr post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, thumbnails, image shapes or analytics.
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["TUMBLR"],
+    "contentType": "IMAGE",
+    "text": "Our autumn lookbook is live",
+    "mediaUrls": ["PUBLIC_URL_FROM_STEP_A"],
+    "timezone": "Europe/Berlin",
+    "scheduledAt": "2026-11-10T09:00:00.000Z",
+    "tumblrConnectionIds": ["TUMBLR_ACCOUNT_ID"],
+    "tumblrConfigs": [{ "connectionId": "TUMBLR_ACCOUNT_ID", "tags": ["lookbook", "autumn"], "title": "Autumn lookbook" }]
+  }'
+```
+
+### WordPress
+
+Put the site's account `id` in `wordpressConnectionIds`. The text becomes the body of a published blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable. A WordPress post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video up to 500 MB, and alt text. The first image is the featured image; the other images or the video follow the text. `wordpressConfigs` sets the `title` (max 300; without one, the first line of the text cut to 100 characters), an `excerpt` (max 1000, the summary WordPress shows in post lists and feeds), `categoryIds` and `tags` (up to 50 each). A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise. A site that answers 401 or 403 is marked for reconnect. WordPress has no first comments, thumbnails, image shapes or analytics.
+
+When the user names categories, list the site's categories and match the names to ids:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/social-accounts/WORDPRESS_ID/wordpress-categories"
+```
+
+Returns `{ "categories": [{ "id", "name", "parentId" }] }`, sorted by name; `parentId` is `null` for a top-level category. Categories belong to one site. An id that is not a WordPress account in this workspace gets `404`; a site that refuses the request or cannot be reached gets an error with the reason. Without `categoryIds` WordPress files the post under the site's default category.
+
+```bash
+curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
+  -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platforms": ["WORDPRESS"],
+    "contentType": "IMAGE",
+    "text": "Our autumn collection is here.\n\nRead about every piece at https://example.com/autumn",
+    "mediaUrls": ["PUBLIC_URL_FROM_STEP_A"],
+    "timezone": "Europe/Berlin",
+    "scheduledAt": "2026-11-10T09:00:00.000Z",
+    "wordpressConnectionIds": ["WORDPRESS_ID"],
+    "wordpressConfigs": [{ "connectionId": "WORDPRESS_ID", "title": "The autumn collection", "categoryIds": [12], "tags": ["autumn", "new"] }]
   }'
 ```
 
@@ -637,7 +688,7 @@ Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPo
 All optional, and each takes at most one entry per platform. A platform the field does not support returns `400`.
 
 - `firstComments`: `[{ "platform": "LINKEDIN", "text": "Sign up at example.com" }]`. Posted from the same account about 10 seconds after the platform publishes (60 on YouTube): a comment on LinkedIn (1250 characters), YouTube (10000), Facebook (8000) and Instagram (2200), a reply on X (280), Threads (500), Bluesky (300) and Mastodon (500). The platform must be one the post goes to. Not for private or made for kids YouTube videos or Facebook and Instagram stories. Retried up to 3 times, except on X, where it is not retried and costs credits like any X post on a lifetime-deal account. A failed comment never fails the post; read `firstCommentStatus` (`PENDING`, `PUBLISHED`, `FAILED`) and `firstCommentError` on the post's platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. Not on the bulk top level; bulk items take it.
-- `platformThumbnails`: `[{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` for `VIDEO` posts. YouTube, Facebook, LinkedIn and Telegram take an image; Instagram and Pinterest take an image or a frame (`thumbnailTimestampMs`), the image winning when both are sent; TikTok takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`. Not for Facebook or Instagram stories.
+- `platformThumbnails`: `[{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` for `VIDEO` posts. YouTube, Facebook, Instagram, LinkedIn, Pinterest and Telegram take an image or a frame (`thumbnailTimestampMs`, ms from the start), the image winning when both are sent; TikTok takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`, which work on every one of these platforms; a post-level `thumbnailUrl` sent with a frame wins everywhere except TikTok. Not for Facebook or Instagram stories.
 - `platformAspectRatios`: `[{ "platform": "INSTAGRAM", "aspectRatio": "PORTRAIT", "fit": "PAD" }]` for `IMAGE` and `CAROUSEL` posts. `SQUARE` is 1:1, `PORTRAIT` 4:5, `VERTICAL` 9:16, `LANDSCAPE` 1.91:1. Instagram takes all but `VERTICAL`, TikTok takes all four, and no other platform takes any. `fit` is `CROP` (the default, cut from the center) or `PAD` (keep the whole image and fill the rest with a blurred copy). Not for Instagram stories.
 - `twitterKeepLinks: true`: keeps links in X text clickable. By default every link in X text is broken (`example.com` becomes `example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; any other plan gets `400`. `POST /social-posts` and `PATCH` only, not bulk.
 - `instagramConfigs[].shareToStory` and `facebookConfigs[].shareToStory`: also publish the same media as a story next to the feed post or reel. The story is its own entry in `platforms` with `postType: STORY` and succeeds, fails and retries on its own. It skips the caption and first comment, and a story video must be 60 seconds or shorter.
@@ -645,6 +696,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `instagramConfigs[].userTags`: up to 20 public accounts tagged in the media, each `{ "username": "jane.doe", "x": 0.5, "y": 0.3 }`. `x` and `y` run from 0 to 1 from the top-left corner. Only one image (feed or story) or one video (Reel or story); a carousel or several stories with tags returns `400`. A feed image needs both `x` and `y` on every tag, a story takes them optionally but never just one, and a video ignores them. If Instagram refuses a tag because the account is private or doesn't exist, the post goes out without its tags and `instagramUntaggedUsernames` lists the refused usernames. The story `shareToStory` adds carries no tags.
 - `instagramConfigs[].aiGenerated: true`: disclose that the post was made or edited with AI. Instagram shows its "AI info" label on the post. Works on images, carousels, reels and stories, and a story made with `shareToStory` carries the label too.
 - `youtubeConfigs[].aiGenerated: true`: disclose altered or synthetic content, such as an AI voice, an AI avatar or realistic footage that was generated or edited. YouTube shows its "Altered or synthetic content" label on the video. Works on videos and Shorts. Omit it or send `false` for no label.
+- `youtubeConfigs[].defaultAudioLanguage`: the language spoken in the video's original audio, as a BCP-47 tag such as `en`, `pt-BR` or `es-419` (max 35 characters), so YouTube does not treat a Portuguese video as English. `null` clears a saved value. It does not turn off YouTube's automatic dubbing.
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
 - `facebookConfigs[].imageLayout: "CAROUSEL"` with `carouselCards`: swipeable cards instead of a photo grid, each opening its own link. Send one card per image, in the same order as `mediaUrls`: `{ "link": "https://example.com/a", "title": "Shoes", "description": "New in" }` (`link` required, `title` max 100, `description` max 200). Needs 2 to 5 images, no videos and `postType: FEED`, or the API returns `400`. Facebook shows the card image and title only for links to a website the Page owns; any other link makes the post fail with a message saying so. Leave `imageLayout` out for the usual photo grid.
 - LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
@@ -682,6 +734,8 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 | Threads | Supported | Supported | Up to 10, images and videos |
 | Google Business Profile | One JPEG or PNG, ≤5MB | Not supported | — |
 | Telegram | JPEG/PNG/WebP, ≤10MB each | One MP4/MOV, ≤50MB | Up to 10 images |
+| Tumblr | JPEG/PNG/GIF, ≤10MB each | One MP4, ≤500MB, up to 10 min | Up to 30 images |
+| WordPress | JPEG/PNG/WebP/GIF, ≤20MB each | One MP4/MOV, ≤500MB | Up to 20 images |
 
 ## Tips for the Agent
 
@@ -711,8 +765,9 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - For media posts, complete the full 3-step upload flow (get upload URL → PUT file → create post with `mediaUrls`).
 - `scheduledAt` must be ISO 8601. A future value schedules; a past value publishes immediately, the same as omitting it. With `saveAsDraft: true` it is the draft's planned date and the post stays a draft.
 - `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
-- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
+- Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - Telegram takes text up to 4096 characters, up to 10 images or one video up to 50 MB; a caption over 1024 characters is sent as its own message after the media.
+- For a WordPress post, set the title with `wordpressConfigs` unless the first line of the text works as one. When the user names categories, list them with `GET /social-accounts/:id/wordpress-categories` and pass the ids as `categoryIds`.
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - For a Pinterest post, pass the board the user named as `boardName`. Otherwise list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Never send both. Leave both out only when the user is happy with the default "AdaptlyPost" board.
