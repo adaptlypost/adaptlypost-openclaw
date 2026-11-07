@@ -155,7 +155,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `textFormatPresetId` | string | no | Facebook's id for a colored text background (digits, 1-20), for example `106018623298955` (solid purple) or `249307305544279` (red to blue gradient) |
 | `imageLayout` | string | no | `GRID` (photo grid) or `CAROUSEL` (swipeable cards, each opening its own link). Default: `GRID` |
 | `carouselCards` | array | no | Up to 5 cards, one per image in the same order as `mediaUrls`: `link` (**required**, http or https URL, max 2048 chars), `title` (max 100 chars), `description` (max 200 chars). Only read when `imageLayout` is `CAROUSEL` |
-| `aiGenerated` | boolean | no | Disclose that the post was made or edited with AI. Facebook shows its "AI info" label on the post. Works on a `contentType: VIDEO` post with `postType` `REEL` or `STORY`, and a story made with `shareToStory` from a video reel carries the label too. Facebook takes the label on nothing else, so any other combination is rejected with a `400`. Omit it or send `false` for no label |
+| `aiGenerated` | boolean | no | Disclose that the post was made or edited with AI. Facebook shows its "AI info" label on the post. Works on every `contentType: VIDEO` post, whatever its `postType`: Facebook publishes every video as a reel, and a video story carries the label too. Photos, carousels and text posts are rejected with a `400`. Omit it or send `false` for no label |
 
 **Content types:**
 
@@ -169,7 +169,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 
 **Link carousel:** `imageLayout: CAROUSEL` needs `postType: FEED`, 2 to 5 images, no videos and one `carouselCards` entry per image; anything else returns `400`. Facebook shows a card's image and title only when its link goes to a website the Page owns. Any other link makes the post fail with a message saying so. Posts that leave out `imageLayout` get a photo grid.
 
-**AI info label:** `aiGenerated: true` works only on a `VIDEO` post with `postType` `REEL` or `STORY`. Any other combination returns `400` with `code: post_validation_failed` and the issue code `FACEBOOK_AI_LABEL_REEL_OR_STORY_VIDEO`. The post reads it back as `facebookAiGenerated`.
+**AI info label:** `aiGenerated: true` works on every `VIDEO` post, whatever its `postType`, because Facebook publishes every video as a reel, and a video story carries the label too. A photo, carousel or text post returns `400` with `code: post_validation_failed` and the issue code `FACEBOOK_AI_LABEL_VIDEO_ONLY`. The post reads it back as `facebookAiGenerated`.
 
 **Media notes:**
 
