@@ -343,6 +343,7 @@ function facebookLine(entry: ConfigEntry): string {
   if (entry.shareToStory === true && postType !== "STORY") parts.push("also shared as a story");
   if (nonEmpty(entry.textFormatPresetId)) parts.push(`colored background ${entry.textFormatPresetId}`);
   if (entry.imageLayout === "CAROUSEL") parts.push(carouselLabel(entry.carouselCards));
+  if (entry.aiGenerated === true) parts.push("AI info label");
   return `Facebook: ${parts.join(", ")}`;
 }
 
@@ -617,6 +618,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     tagHandles(entry.instagramUserTags) ? `tags ${tagHandles(entry.instagramUserTags)}` : undefined,
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
     entry.youtubeAiGenerated === true ? "altered or synthetic content label" : undefined,
+    entry.facebookAiGenerated === true ? "AI info label" : undefined,
     entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`

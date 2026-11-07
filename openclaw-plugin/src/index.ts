@@ -354,6 +354,12 @@ const PlatformConfigFields = {
             },
           ),
         ),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              'Disclose that the post was made or edited with AI. Facebook shows its "AI info" label on the post. Works on a contentType VIDEO post with postType REEL or STORY, and a story made with shareToStory from a video reel carries the label too. Facebook takes the label on nothing else, so any other combination is rejected with a 400. Omit it or send false for no label.',
+          }),
+        ),
       }),
       {
         description:
