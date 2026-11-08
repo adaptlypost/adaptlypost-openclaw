@@ -1,0 +1,39 @@
+SKILL.md
+  s_9fcd50f8ee03ee::t_a30bd11b3f63b0 5,87,342,511-514,690-691
+openclaw-plugin/README.md
+  s_9fcd50f8ee03ee::t_6ec4d7f75ce355 75,179-188
+openclaw-plugin/openclaw.plugin.json
+  s_9fcd50f8ee03ee::t_1224a44fe810b2 5
+openclaw-plugin/package.json
+  s_9fcd50f8ee03ee::t_a6020b24d96b00 3
+openclaw-plugin/src/approvals.ts
+  s_9fcd50f8ee03ee::t_ed6789c9fbe1d0 456-479,582,672
+openclaw-plugin/src/index.ts
+  s_9fcd50f8ee03ee::t_03ba17501a389d 521-541,612-618,892
+references/api-reference.md
+  s_9fcd50f8ee03ee::t_12e7334437d74d 250,299-328,472,545,559,718
+references/platform-configs.md
+  s_9fcd50f8ee03ee::t_44246fd9200776 398,408,418,425
+skills/adaptlypost/SKILL.md
+  s_9fcd50f8ee03ee::t_38666c140c8632 5,87,342,511-514,690-691
+skills/adaptlypost/references/api-reference.md
+  s_9fcd50f8ee03ee::t_c875612fb5bee9 250,299-328,472,545,559,718
+skills/adaptlypost/references/platform-configs.md
+  s_9fcd50f8ee03ee::t_e399dfaaa8ab94 398,408,418,425
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72d29fe7b0b1b3d4e4da6f7c87d4b7ac71d6b0ee",
+  "prompts": {},
+  "sessions": {
+    "s_9fcd50f8ee03ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79549624-43f3-433c-84f4-edea199c41d0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
