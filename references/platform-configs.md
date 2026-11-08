@@ -194,7 +194,8 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
       "aiGenerated": false,
       "defaultAudioLanguage": "pt-BR",
       "categoryId": "22",
-      "playlistId": "PLxxxxxxxx"
+      "playlistId": "PLxxxxxxxx",
+      "scheduleOnYouTube": false
     }
   ]
 }
@@ -215,6 +216,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `defaultAudioLanguage` | string or null | no | Language spoken in the video's original audio, as a BCP-47 tag such as `en`, `pt-BR` or `es-419` (max 35 chars), so YouTube does not treat it as another language. `null` clears a saved value. Does not turn off YouTube's automatic dubbing |
 | `categoryId` | string | no | YouTube category ID |
 | `playlistId` | string | no | Add to playlist after publishing |
+| `scheduleOnYouTube` | boolean | no | Upload the video as soon as the post is scheduled, as a private video with YouTube's own publish time set to `scheduledAt`. YouTube publishes it at that time, so the user can set up Test & Compare in YouTube Studio first. Needs `privacyStatus` `public` or unset (else `400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (else `400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual. Once `youtubeScheduledVideoId` is set, the post cannot be updated, unscheduled or published early (`409`); delete it and schedule it again. Deleting before `scheduledAt` also deletes the video from YouTube, and a refusal from YouTube returns `502` with the post kept |
 
 **Media notes:**
 

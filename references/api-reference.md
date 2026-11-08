@@ -273,7 +273,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
-- `youtubeConfigs` (array): YouTube-specific settings per connection
+- `youtubeConfigs` (array): YouTube-specific settings per connection. `scheduleOnYouTube: true` uploads the video as soon as the post is scheduled, as a private video that YouTube publishes itself at `scheduledAt`, so the user can set up Test & Compare in YouTube Studio first. It needs `privacyStatus` `public` or unset (`400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (`400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts, `reshareOf` to reshare a LinkedIn post)
 - `twitterConfigs` (array): X settings per account: `quoteOf` quotes one of the account's own X posts
 - `googleBusinessConfigs` (array): Google Business Profile settings per location: topic (update, event or offer), button, event and offer details
@@ -479,7 +479,7 @@ Platform entry fields set by the newer request fields (absent when not used):
 - Image shape: `mediaAspectRatio`, `mediaAspectRatioFit`
 - Instagram: `instagramCollaborators`, `instagramUserTags` (each `{ username, x, y }`), `instagramAiGenerated` (the post carries the AI info label), `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
 - Facebook: `facebookTextFormatPresetId`, `facebookImageLayout` (`GRID` or `CAROUSEL`), `facebookCarouselCards` (each with `link`, `title`, `description`), `facebookAiGenerated` (the post carries the AI info label; see `facebookConfigs[].aiGenerated`)
-- YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`), `youtubeDefaultAudioLanguage`
+- YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`), `youtubeDefaultAudioLanguage`, `youtubeScheduleOnYouTube`, `youtubeScheduledVideoId` (the YouTube video uploaded ahead of `scheduledAt`; while it is set and the entry is not published, the post cannot be updated, unscheduled or published early)
 - X: `twitterKeepLinks`, `twitterQuoteOf` (the id of the X post this account quotes)
 - LinkedIn: `linkedinDocumentTitle`, `linkedinReshareOf` (the LinkedIn post URN this account reshares)
 - TikTok: `tiktokDraftFallback` (TikTok's daily cap was hit, so the content went to the creator's TikTok inbox as a draft instead of being published)
@@ -723,6 +723,8 @@ Update a `DRAFT` or `SCHEDULED` post, or a post that `FAILED` on every platform.
 
 Moving a `SCHEDULED` post's `scheduledAt` more than a minute into the past returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time the post already has is accepted even after it passed. To publish now, use `POST /social-posts/:id/publish` without `scheduledAt`. `scheduledAt: null` takes the planned date off a `DRAFT` or a failed post, which then leaves the calendar; on a `SCHEDULED` post it returns `400`, so use `POST /social-posts/:id/unschedule` there. Leaving `scheduledAt` out keeps the current date.
 
+A post with a YouTube entry whose `youtubeScheduledVideoId` is set and not yet published returns `409`, because the video already waits on YouTube for its publish time. Delete the post and schedule it again to change it.
+
 Accepts the same body as `POST /social-posts`, minus `saveAsDraft`, `recurrence` and `accountIds`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments`, `threadReplies` and `platformThumbnails` you omit keep their values. Sending `firstComments`, `threadReplies` or `platformThumbnails` replaces every stored entry, and a `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
@@ -731,13 +733,15 @@ Accepts the same body as `POST /social-posts`, minus `saveAsDraft`, `recurrence`
 
 Take a post off the calendar without deleting it. Accepts a `SCHEDULED` post, or a `DRAFT` that still has a date, and turns it into an undated `DRAFT` with `scheduledAt: null`. Content, media and accounts are kept, and nothing publishes until the post is scheduled again with `POST /social-posts/:id/publish`. No request body.
 
-Any other status returns `400` `Cannot edit post in current state`. An id outside the workspace returns `404` `Post not found or access denied`.
+Any other status returns `400` `Cannot edit post in current state`. An id outside the workspace returns `404` `Post not found or access denied`. A post whose YouTube video already waits on YouTube (`youtubeScheduledVideoId` set, not yet published) returns `409`.
 
 **Response:** the post as an undated draft, in the same shape as `GET /social-posts/:id`.
 
 ### DELETE /social-posts/:id
 
 Delete a post record. Use it to cancel a `DRAFT` or `SCHEDULED` post; a deleted scheduled post will not publish. A post that is `PUBLISHING` right now is refused with `409` `Post is being published and cannot be deleted`; wait for it to finish. Other statuses are accepted, but deleting a `COMPLETED` or `PARTIAL_FAILURE` post only drops AdaptlyPost's record: the content already exists on each network, and removing it there is a manual step. Prefer `PATCH` over delete-and-recreate. Irreversible.
+
+Deleting a post before `scheduledAt` while its YouTube video waits on YouTube (`youtubeScheduledVideoId` set) also deletes that video from YouTube. If YouTube refuses, the call returns `502` and the post stays; try again, after reconnecting the channel if it was disconnected.
 
 **Response:** `{ "deleted": true }`
 
@@ -755,7 +759,7 @@ Publish a draft, either immediately or on a schedule. Accepts a `DRAFT`, and als
 - `timezone` (string, required)
 - `publishNow` (boolean, optional): publishes now even when the draft has a planned date. Sending it with `scheduledAt` returns `400` `Send either scheduledAt or publishNow, not both`.
 
-Without `scheduledAt`, a draft whose planned date is in the future is scheduled for that date, and any other post publishes now. Scheduling needs `posts.schedule` and publishing now needs `posts.publish`, so a key that holds only `posts.draft` gets `403 permission_denied`. Publishing now moves the post to `PENDING`, clears its stored `scheduledAt`, queues a publishing job per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. Scheduling sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first.
+Without `scheduledAt`, a draft whose planned date is in the future is scheduled for that date, and any other post publishes now. Scheduling needs `posts.schedule` and publishing now needs `posts.publish`, so a key that holds only `posts.draft` gets `403 permission_denied`. Publishing now moves the post to `PENDING`, clears its stored `scheduledAt`, queues a publishing job per platform, and `queuedPlatforms` lists them. This is irreversible from the agent's side once it returns. Scheduling sets `SCHEDULED` and returns an empty `queuedPlatforms`. `timezone` is required (use `UTC` if unknown); it is stored for display and does not shift `scheduledAt`. Fails with `400` if an account on the draft was disconnected (`Connection not found for <platform>`) or a TikTok entry has no `privacyLevel` (`Privacy level is required for TikTok posts`); fix those with `PATCH` first. A post whose YouTube video already waits on YouTube (`youtubeScheduledVideoId` set, not yet published) returns `409`.
 
 **Response:** `{ "postId", "queuedPlatforms", "isScheduled", "scheduledAt" }`. Read `GET /social-posts/:id/results` afterwards for the per-platform outcome.
 

@@ -386,6 +386,9 @@ function youtubeExtras(entry: ConfigEntry): string {
     entry.license === "creativeCommon" ? "Creative Commons license" : undefined,
     entry.notifySubscribers === false ? "no subscriber notification" : undefined,
     entry.allowEmbedding === false ? "embedding off" : undefined,
+    entry.scheduleOnYouTube === true
+      ? "uploaded now as a private video that YouTube publishes at the scheduled time"
+      : undefined,
   ].filter(nonEmpty);
   return parts.length ? `, ${parts.join(", ")}` : "";
 }
