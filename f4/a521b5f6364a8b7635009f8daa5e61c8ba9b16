@@ -1,0 +1,45 @@
+README.md
+  s_50fcd3887b10ce::t_56815299d6c4ff 3,7
+SKILL.md
+  s_50fcd3887b10ce::t_bf0d4e5e4d4f4b 3,5,20,28,56-58,84,97,101,103-105,343,433,442-444,457,468,501-554,561,565,567-568,573,650,747-748,762-764,773,782
+openclaw-plugin/README.md
+  s_50fcd3887b10ce::t_7d47752a421210 5-6,68-81,116,149-176,178,218-224,232-233,276-291
+openclaw-plugin/openclaw.plugin.json
+  s_50fcd3887b10ce::t_0f6e10dde6ee3e 4-5,47-69,272-491
+openclaw-plugin/package-lock.json
+  s_50fcd3887b10ce::t_950678338fe681 3,9
+openclaw-plugin/package.json
+  s_50fcd3887b10ce::t_27d062dc890749 3-4
+openclaw-plugin/src/api.ts
+  s_50fcd3887b10ce::t_9e2eebfbb75483 59,86,219-232,285,299,332,343,437
+openclaw-plugin/src/approvals.ts
+  s_50fcd3887b10ce::t_0fc496d0df5e8b 3,23-30,40-47,367-392,455,460,476-479,702-703,978-1271,1292-1303
+openclaw-plugin/src/index.ts
+  s_50fcd3887b10ce::t_e60fd36da8ea98 16-17,21,24-26,29-30,144-148,204-210,214-215,218-227,238,242-244,261-262,414-420,422-440,566,577,591,597,672,744-789,794,956,998,1236,1252,1270-1581
+references/api-reference.md
+  s_50fcd3887b10ce::t_9644c5de96c128 15-17,38-39,237,243,277-278,297,323,483-485,552,664,673,722,724,726,929-1106,1122-1126,1128,1132-1134,1161,1207-1208,1210,1225,1230,1248,1263-1264,1270,1288,1300,1348,1354,1437-1445,1450-1455
+references/platform-configs.md
+  s_50fcd3887b10ce::t_3eb1d3e2b35fba 3,36-37,41,275,277-302,415,419,452
+skills/adaptlypost/SKILL.md
+  s_50fcd3887b10ce::t_935083d778ef3e 3,5,20,28,56-58,84,97,101,103-105,343,433,442-444,457,468,501-554,561,565,567-568,573,650,747-748,762-764,773,782
+skills/adaptlypost/references/api-reference.md
+  s_50fcd3887b10ce::t_a604cfca1c71f3 15-17,38-39,237,243,277-278,297,323,483-485,552,664,673,722,724,726,929-1106,1122-1126,1128,1132-1134,1161,1207-1208,1210,1225,1230,1248,1263-1264,1270,1288,1300,1348,1354,1437-1445,1450-1455
+skills/adaptlypost/references/platform-configs.md
+  s_50fcd3887b10ce::t_1a0adb9dc474e1 3,36-37,41,275,277-302,415,419,452
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4a521b5f6364a8b7635009f8daa5e61c8ba9b16",
+  "prompts": {},
+  "sessions": {
+    "s_50fcd3887b10ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea76381a-917d-4983-be94-10ccf3abfe45",
+        "model": "unknown"
+      },
+      "human_author": "Taras Shynkarenko <taras.shinkarenko@gmail.com>"
+    }
+  }
+}
