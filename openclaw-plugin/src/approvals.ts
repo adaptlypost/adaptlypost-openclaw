@@ -453,6 +453,30 @@ function firstCommentLines(params: Record<string, unknown>): string[] {
   );
 }
 
+function counted(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function threadLines(heading: string, texts: unknown, mediaUrls: unknown, indent: string): string[] {
+  const replies = stringArray(texts);
+  if (!replies.length) return [];
+  const images = (Array.isArray(mediaUrls) ? mediaUrls : []).map((urls) => stringArray(urls).length);
+  const totalImages = images.reduce((sum, count) => sum + count, 0);
+  return [
+    `${heading}: ${counted(replies.length, "reply", "replies")}, ${counted(totalImages, "image", "images")}`,
+    ...replies.map((text, index) => {
+      const replyImages = images[index] ? `, ${counted(images[index], "image", "images")}` : "";
+      return `${indent}Reply ${index + 1}: ${nonEmpty(text) ? `"${text}"` : "(no text)"}${replyImages}`;
+    }),
+  ];
+}
+
+function threadReplyLines(params: Record<string, unknown>): string[] {
+  return configEntries(params, "threadReplies").flatMap((entry) =>
+    threadLines(`${platformLabel(entry.platform)} thread`, entry.texts, entry.mediaUrls, "  "),
+  );
+}
+
 function fileName(url: string): string {
   if (url.startsWith("data:")) return "an image sent inline";
   try {
@@ -555,6 +579,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
     ...(nonEmpty(params.thumbnailUrl) ? [`Thumbnail: ${fileName(params.thumbnailUrl)}`] : []),
     ...textLines(params),
     ...firstCommentLines(params),
+    ...threadReplyLines(params),
   ];
 
   return {
@@ -644,6 +669,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     ...(media.length ? [`  Media: ${media.join(", ")}`] : []),
     `  Text: ${nonEmpty(text) ? `"${text}"` : "(none)"}`,
     ...(nonEmpty(entry.firstComment) ? [`  First comment: "${entry.firstComment}"`] : []),
+    ...threadLines("  Thread", entry.threadReplies, entry.threadReplyMediaUrls, "    "),
   ];
 }
 

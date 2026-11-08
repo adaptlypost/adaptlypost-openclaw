@@ -395,6 +395,7 @@ These platforms use only connection ID arrays — no additional config:
 - Up to 4 images per post
 - No video support via this API
 - Links in X text are broken by default (`example.com` becomes `example. com`) because X charges over 10 times more for a post with a link. Top-level `twitterKeepLinks: true` keeps them clickable, on AppSumo lifetime deals only, at 20 credits instead of 2
+- Top-level `threadReplies` with `platform: TWITTER` turns the post into a thread of up to 25 replies, 280 characters each (more on X Premium), with up to 4 images per reply. Thread replies are not retried on X, and a lifetime-deal account pays for each reply like any X post
 
 ### Bluesky
 
@@ -404,6 +405,7 @@ These platforms use only connection ID arrays — no additional config:
 - No video support
 - URLs auto-generate link cards
 - No editing after publishing
+- Top-level `threadReplies` with `platform: BLUESKY` turns the post into a thread of up to 25 replies, 300 characters each, with up to 4 images per reply
 
 ### Mastodon
 
@@ -413,12 +415,14 @@ These platforms use only connection ID arrays — no additional config:
 - 1 video per post
 - Alt text supported
 - No analytics
+- Top-level `threadReplies` with `platform: MASTODON` turns the post into a thread of up to 25 replies, 500 characters each (or the instance's limit), with up to 4 images per reply
 
 ### Threads
 
 - Uses `threadsConnectionIds` array
 - Text + images + video supported
 - Carousels: up to 10 images and videos
+- Top-level `threadReplies` with `platform: THREADS` turns the post into a thread of up to 25 replies, 500 characters each, with up to 4 images per reply
 
 ### LinkedIn
 

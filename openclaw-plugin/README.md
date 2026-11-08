@@ -72,7 +72,7 @@ a scheduled post (Contributor and Viewer), is refused before the prompt.
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
 and every caption including per-platform overrides. It also lists each first
-comment, Instagram collaborators, tagged accounts, audio and story sharing,
+comment, each thread reply with its image count, Instagram collaborators, tagged accounts, audio and story sharing,
 Facebook story sharing and text backgrounds, the Google Business Profile topic, event, offer
 and button, per-platform thumbnails and image shapes, and X links that stay
 clickable. OpenClaw caps a prompt at
@@ -176,6 +176,16 @@ connected in the AdaptlyPost app.
 `firstComments` adds a comment from the same account right after the post goes
 out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Bluesky
 and Mastodon. A failed comment never fails the post.
+
+`threadReplies` turns the post into a thread on X, Threads, Bluesky or
+Mastodon: the post opens it, and each text goes out from the same account as a
+reply to the one before, up to 25 replies per platform. `mediaUrls` runs
+parallel to `texts` and gives each reply up to 4 images from
+`adaptlypost_upload_media`, `[]` for a reply without any. A reply with images
+may have no text. Each reply is held to the platform's limit: 280 characters
+on X (more on X Premium), 500 on Threads, 300 on Bluesky and 500 on Mastodon.
+A platform takes a thread or a first comment, not both. Replies start about 10
+seconds after the post goes out, and a failed thread never fails the post.
 
 To add music to an Instagram Reel, find an `audioId` with
 `adaptlypost_search_instagram_audio` and pass it in `instagramConfigs[].audio`.

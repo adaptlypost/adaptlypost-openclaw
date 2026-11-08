@@ -247,6 +247,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
 - `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
 - `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
+- `threadReplies` (array): Replies that turn the post into a thread on X, Threads, Bluesky or Mastodon. See [Thread replies](#thread-replies)
 - `twitterKeepLinks` (boolean): Keep links in the X text clickable. See [Links on X](#links-on-x)
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately. With `saveAsDraft: true` it is the draft's planned date: the post stays a `DRAFT`, and `POST /social-posts/:id/publish` without `scheduledAt` schedules it for that date
 - `saveAsDraft` (boolean): Save as `DRAFT` instead of scheduling/publishing; validation is deferred to `POST /social-posts/:id/publish`
@@ -295,7 +296,36 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 | `FACEBOOK` | comment | 8000 |
 | `INSTAGRAM` | comment | 2200 |
 
-Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
+Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a platform that also has `threadReplies`, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
+
+#### Thread replies
+
+`threadReplies` turns the post into a thread, one entry per platform. The post opens the thread, and each text goes out from the same account as a reply to the one before:
+
+```json
+{
+  "threadReplies": [
+    {
+      "platform": "TWITTER",
+      "texts": ["2/ Here is what changed", "", "4/ Read more at example.com"],
+      "mediaUrls": [[], ["https://cdn.adaptlypost.com/social-media-posts/uuid/before.png", "https://cdn.adaptlypost.com/social-media-posts/uuid/after.png"], []]
+    }
+  ]
+}
+```
+
+- `platform` (string, required): `TWITTER`, `THREADS`, `BLUESKY` or `MASTODON`
+- `texts` (string[], required): The replies in order, each trimmed, up to 25
+- `mediaUrls` (string[][]): Optional and parallel to `texts`: up to 4 JPEG, PNG, GIF or WEBP image URLs per reply, uploaded through [POST /upload-urls](#post-upload-urls) like the post's own `mediaUrls`, and `[]` for a reply without images. A reply with images may have an empty text
+
+| Platform | Max characters per reply |
+| --- | --- |
+| `TWITTER` | 280 (more on X Premium) |
+| `THREADS` | 500 |
+| `BLUESKY` | 300 |
+| `MASTODON` | 500 (or the instance's limit) |
+
+Any other platform returns `400`, as does a platform the post does not go to, a reply with neither text nor images, a reply over the limit, more than 25 replies, more than 4 images or a video on a reply, a second entry for one platform, and a platform that also has a first comment. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out. On X it is not retried, and a lifetime-deal account pays for each reply like any X post. A failed thread never fails the post: read `threadStatus`, `threadReplyIds` and `threadError` on the platform entry. On `PATCH`, sending the array replaces every stored thread, an entry with `"texts": []` removes that platform's thread, and leaving the array out keeps the stored threads.
 
 #### Platform thumbnails
 
@@ -439,6 +469,7 @@ The post carries its `mediaUrls` at the top level as well as on each platform en
 Platform entry fields set by the newer request fields (absent when not used):
 
 - First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`
+- Thread: `threadReplies` (the reply texts in order, empty when the platform has no thread), `threadReplyMediaUrls` (string[][], parallel to `threadReplies`, `[]` for a reply without images), `threadStatus` (`PENDING` until every reply is posted, `PUBLISHED` once they are, `FAILED` when one could not be), `threadReplyIds` (the platform's ids of the replies published so far, in order, AT URIs on Bluesky; fewer ids than replies means the rest did not go out), `threadError`, `threadPublishedAt`
 - Thumbnail override: `thumbnailUrl`, `thumbnailTimestampMs`
 - Image shape: `mediaAspectRatio`, `mediaAspectRatioFit`
 - Instagram: `instagramCollaborators`, `instagramUserTags` (each `{ username, x, y }`), `instagramAiGenerated` (the post carries the AI info label), `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
@@ -511,7 +542,7 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 - Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`, `pageIds`
 - Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
 
-`firstComments`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`.
+`firstComments`, `threadReplies`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`.
 
 See [platform-configs.md](platform-configs.md) for config schemas.
 
@@ -525,7 +556,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
-- `firstComments`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
+- `firstComments`, `threadReplies`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
 - Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
@@ -684,7 +715,7 @@ Update a `DRAFT` or `SCHEDULED` post. Any other status is rejected with `400` `C
 
 Moving a `SCHEDULED` post's `scheduledAt` more than a minute into the past returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time the post already has is accepted even after it passed. To publish now, use `POST /social-posts/:id/publish` without `scheduledAt`.
 
-Accepts the same body as `POST /social-posts`, minus `saveAsDraft` and `recurrence`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments` and `platformThumbnails` you omit keep their values. Sending `firstComments` or `platformThumbnails` replaces every stored entry. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
+Accepts the same body as `POST /social-posts`, minus `saveAsDraft` and `recurrence`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments`, `threadReplies` and `platformThumbnails` you omit keep their values. Sending `firstComments`, `threadReplies` or `platformThumbnails` replaces every stored entry, and a `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
 
