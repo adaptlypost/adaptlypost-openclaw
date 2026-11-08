@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  AdaptlyPostApiError,
   callApi,
   describeLocalMedia,
   describeRemoteUrl,
@@ -19,6 +20,14 @@ export const PAUSE_RECURRING_TOOL = "adaptlypost_pause_recurring_post";
 export const RESUME_RECURRING_TOOL = "adaptlypost_resume_recurring_post";
 export const DELETE_RECURRING_TOOL = "adaptlypost_delete_recurring_post";
 export const REMOVE_ACCOUNT_TOOL = "adaptlypost_remove_account";
+export const REPLY_INBOX_COMMENT_TOOL = "adaptlypost_reply_inbox_comment";
+export const HIDE_INBOX_COMMENT_TOOL = "adaptlypost_hide_inbox_comment";
+export const UNHIDE_INBOX_COMMENT_TOOL = "adaptlypost_unhide_inbox_comment";
+export const DELETE_INBOX_COMMENT_TOOL = "adaptlypost_delete_inbox_comment";
+export const REPLY_INBOX_MENTION_TOOL = "adaptlypost_reply_inbox_mention";
+export const SEND_INBOX_MESSAGE_TOOL = "adaptlypost_send_inbox_message";
+export const REPLY_INBOX_REVIEW_TOOL = "adaptlypost_reply_inbox_review";
+export const DELETE_INBOX_REVIEW_REPLY_TOOL = "adaptlypost_delete_inbox_review_reply";
 export const GATED_TOOLS = [
   UPLOAD_TOOL,
   CREATE_POST_TOOL,
@@ -28,6 +37,14 @@ export const GATED_TOOLS = [
   RESUME_RECURRING_TOOL,
   DELETE_RECURRING_TOOL,
   REMOVE_ACCOUNT_TOOL,
+  REPLY_INBOX_COMMENT_TOOL,
+  HIDE_INBOX_COMMENT_TOOL,
+  UNHIDE_INBOX_COMMENT_TOOL,
+  DELETE_INBOX_COMMENT_TOOL,
+  REPLY_INBOX_MENTION_TOOL,
+  SEND_INBOX_MESSAGE_TOOL,
+  REPLY_INBOX_REVIEW_TOOL,
+  DELETE_INBOX_REVIEW_REPLY_TOOL,
 ] as const;
 
 export const APPROVAL_TIMEOUT_MS = 300_000;
@@ -347,6 +364,32 @@ function facebookLine(entry: ConfigEntry): string {
   return `Facebook: ${parts.join(", ")}`;
 }
 
+function tiktokExtras(entry: ConfigEntry): string {
+  const parts = [
+    entry.allowComments === false ? "comments off" : undefined,
+    entry.allowDuet === false ? "duets off" : undefined,
+    entry.allowStitch === false ? "stitches off" : undefined,
+    entry.brandedContent === true ? "branded content" : undefined,
+    entry.brandedContentOwnBrand === true ? "promotes own brand" : undefined,
+    entry.autoAddMusic === true ? "auto music" : undefined,
+    entry.aiGenerated === true ? "AI-generated label" : undefined,
+  ].filter(nonEmpty);
+  return parts.length ? `, ${parts.join(", ")}` : "";
+}
+
+function youtubeExtras(entry: ConfigEntry): string {
+  const tags = stringArray(entry.tags);
+  const parts = [
+    tags.length ? `tags ${tags.join(", ")}` : undefined,
+    nonEmpty(entry.playlistId) ? `playlist ${entry.playlistId}` : undefined,
+    nonEmpty(entry.categoryId) ? `category ${entry.categoryId}` : undefined,
+    entry.license === "creativeCommon" ? "Creative Commons license" : undefined,
+    entry.notifySubscribers === false ? "no subscriber notification" : undefined,
+    entry.allowEmbedding === false ? "embedding off" : undefined,
+  ].filter(nonEmpty);
+  return parts.length ? `, ${parts.join(", ")}` : "";
+}
+
 function carouselLabel(value: unknown): string {
   const cards = Array.isArray(value) ? (value as ConfigEntry[]) : [];
   const links = cards.map((card, index) => `card ${index + 1} ${String(card.link ?? "(no link)")}`);
@@ -409,12 +452,12 @@ function settingLines(params: Record<string, unknown>): string[] {
   const lines: string[] = [];
   for (const entry of configEntries(params, "tiktokConfigs")) {
     lines.push(
-      `TikTok: ${String(entry.privacyLevel)}${entry.sendAsDraft ? ", sent to TikTok drafts" : ""}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}`,
+      `TikTok: ${String(entry.privacyLevel)}${entry.sendAsDraft ? ", sent to TikTok drafts" : ""}${tiktokExtras(entry)}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}`,
     );
   }
   for (const entry of configEntries(params, "youtubeConfigs")) {
     lines.push(
-      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${entry.aiGenerated === true ? ", altered or synthetic content label" : ""}${nonEmpty(entry.defaultAudioLanguage) ? `, audio language ${entry.defaultAudioLanguage}` : ""}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
+      `YouTube: ${String(entry.privacyStatus ?? "public")} ${String(entry.postType ?? "VIDEO")}${entry.madeForKids ? ", made for kids" : ""}${entry.aiGenerated === true ? ", altered or synthetic content label" : ""}${nonEmpty(entry.defaultAudioLanguage) ? `, audio language ${entry.defaultAudioLanguage}` : ""}${youtubeExtras(entry)}${nonEmpty(entry.videoTitle) ? `, title "${entry.videoTitle}"` : ""}`,
     );
   }
   for (const entry of configEntries(params, "instagramConfigs")) lines.push(instagramLine(entry));
@@ -430,6 +473,10 @@ function settingLines(params: Record<string, unknown>): string[] {
   }
   for (const entry of configEntries(params, "linkedinConfigs")) {
     if (nonEmpty(entry.documentTitle)) lines.push(`LinkedIn: document title "${entry.documentTitle}"`);
+    if (nonEmpty(entry.reshareOf)) lines.push(`LinkedIn: reshares ${entry.reshareOf} with the text as commentary`);
+  }
+  for (const entry of configEntries(params, "twitterConfigs")) {
+    if (nonEmpty(entry.quoteOf)) lines.push(`X: quotes ${entry.quoteOf} with the text as commentary`);
   }
   lines.push(...pinterestLines(params));
   if (params.twitterKeepLinks === true && stringArray(params.platforms).includes("TWITTER")) {
@@ -652,6 +699,8 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
       ? `button ${entry.googleBusinessCallToActionType}${nonEmpty(entry.googleBusinessCallToActionUrl) && entry.googleBusinessCallToActionType !== "CALL" ? ` ${entry.googleBusinessCallToActionUrl}` : ""}`
       : undefined,
     entry.twitterKeepLinks === true ? "links stay clickable" : undefined,
+    nonEmpty(entry.twitterQuoteOf) ? `quotes ${entry.twitterQuoteOf}` : undefined,
+    nonEmpty(entry.linkedinReshareOf) ? `reshares ${entry.linkedinReshareOf}` : undefined,
   ].filter(nonEmpty);
   const titles = [
     entry.tiktokTitle,
@@ -926,6 +975,300 @@ async function describeAccountRemoval(cfg: PluginConfig, params: Record<string, 
   };
 }
 
+const INBOX_QUOTE_LIMIT = 120;
+const INBOX_MIN_QUOTE = 20;
+const INBOX_LIST_LOOKUP_LIMIT = 100;
+
+type InboxPerson = { name?: string | null; username?: string | null; isAnonymous?: boolean };
+type InboxCapabilities = { canReply?: boolean; canHide?: boolean; canDelete?: boolean; canLike?: boolean };
+type InboxItemBase = { id: string; platform?: string; accountName?: string; capabilities?: InboxCapabilities };
+type InboxCommentRecord = InboxItemBase & { author?: InboxPerson; text?: string; isHidden?: boolean };
+type InboxMentionRecord = InboxItemBase & { author?: InboxPerson; text?: string };
+type InboxMessageRecord = { isOwn?: boolean; text?: string | null; hasAttachments?: boolean };
+type InboxConversationRecord = InboxItemBase & { participant?: InboxPerson; replyWindowEndsAt?: string | null };
+type InboxReviewRecord = InboxItemBase & {
+  reviewer?: InboxPerson;
+  rating?: number;
+  text?: string | null;
+  reply?: { text?: string | null } | null;
+};
+
+type Lookup<T> = { item?: T; note?: string };
+
+function personLabel(person: InboxPerson | undefined): string {
+  if (person?.isAnonymous) return "an anonymous reviewer";
+  const name = nonEmpty(person?.name) ? person.name : undefined;
+  const handle = nonEmpty(person?.username) ? `@${person.username.replace(/^@/, "")}` : undefined;
+  if (name && handle) return `${name} (${handle})`;
+  return name ?? handle ?? "an unknown author";
+}
+
+function shorten(text: string, limit: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > limit ? `${flat.slice(0, Math.max(0, limit - 1))}…` : flat;
+}
+
+function inboxAccountLine(item: InboxItemBase | undefined): string | undefined {
+  if (!item) return undefined;
+  return `Account: ${platformLabel(item.platform)} ${String(item.accountName ?? "")}`.trimEnd();
+}
+
+function inboxTarget(item: InboxItemBase | undefined, fallback: string): string {
+  return item?.platform ? platformLabel(item.platform) : fallback;
+}
+
+function requireText(params: Record<string, unknown>): string {
+  if (!nonEmpty(params.text)) throw new Error("text is empty, so there is nothing to send. Nothing was sent.");
+  return params.text;
+}
+
+async function requireInboxReply(cfg: PluginConfig, action: string): Promise<void> {
+  const me = await keyCapabilities(cfg, AbortSignal.timeout(LOOKUP_TIMEOUT_MS));
+  if (me && Array.isArray(me.permissions) && !me.permissions.includes("inbox.reply")) {
+    throw new Error(
+      `${roleHolder(me)} cannot ${action}: every inbox write needs inbox.reply, which only the Editor and Admin roles hold, so AdaptlyPost would refuse with 403 permission_denied. Nothing was sent or changed. Tell the user a workspace member with an Editor or Admin role has to do it in the AdaptlyPost app, or give the agent a key with that role.`,
+    );
+  }
+}
+
+async function lookupInboxItem<T>(what: string, id: string, load: (signal: AbortSignal) => Promise<T | undefined>): Promise<Lookup<T>> {
+  const note = `Could not load ${what} ${id} for this prompt, so it is named by id only.`;
+  try {
+    const item = await load(AbortSignal.timeout(LOOKUP_TIMEOUT_MS));
+    return item ? { item } : { note };
+  } catch (error) {
+    if (error instanceof AdaptlyPostApiError && error.status === 404) {
+      throw new Error(`There is no ${what} with id ${id} in this workspace's inbox, so nothing was sent or changed. List the inbox again for current ids.`);
+    }
+    return { note };
+  }
+}
+
+async function findInRecentList<T extends { id: string }>(
+  cfg: PluginConfig,
+  path: string,
+  key: string,
+  id: string,
+  signal: AbortSignal,
+): Promise<T | undefined> {
+  const page = (await callApi(cfg, "GET", path, { query: { limit: INBOX_LIST_LOOKUP_LIMIT }, signal })) as Record<string, unknown>;
+  const items = Array.isArray(page[key]) ? (page[key] as T[]) : [];
+  return items.find((item) => item.id === id);
+}
+
+function requireCapability(item: InboxItemBase | undefined, capability: keyof InboxCapabilities, what: string): void {
+  if (item?.capabilities?.[capability] === false) {
+    throw new Error(
+      `${platformLabel(item.platform)} does not allow this on ${what} ${item.id} (capabilities.${capability} is false), so AdaptlyPost would refuse with 400 inbox_action_unsupported. Nothing was sent or changed.`,
+    );
+  }
+}
+
+function inboxPrompt(
+  title: string,
+  before: string[],
+  quote: { label: string; text?: string | null } | undefined,
+  after: string[],
+  ifTooLong: string,
+): string {
+  const fixed = [...before, ...after];
+  let lines = fixed;
+  if (quote && nonEmpty(quote.text)) {
+    const room = DESCRIPTION_LIMIT - fixed.join("\n").length - quote.label.length - 5;
+    const limit = Math.min(INBOX_QUOTE_LIMIT, room);
+    if (limit >= INBOX_MIN_QUOTE) lines = [...before, `${quote.label}: "${shorten(quote.text, limit)}"`, ...after];
+  }
+  return requireFullPrompt(title, lines, ifTooLong);
+}
+
+const SHORTEN_TEXT = "Shorten the text, or let the user send it from the AdaptlyPost app.";
+
+type CommentAction = {
+  title: string;
+  effect: string;
+  action: string;
+  capability: keyof InboxCapabilities;
+  withText: boolean;
+  severity: ApprovalRequest["severity"];
+  visibility: ApprovalRequest["scope"]["visibility"];
+};
+
+const COMMENT_ACTIONS: Record<string, CommentAction> = {
+  [REPLY_INBOX_COMMENT_TOOL]: {
+    title: "Reply to a comment",
+    effect: "Posts this reply publicly under the comment, from the account below. It goes out immediately.",
+    action: "reply to comments",
+    capability: "canReply",
+    withText: true,
+    severity: "critical",
+    visibility: "public",
+  },
+  [HIDE_INBOX_COMMENT_TOOL]: {
+    title: "Hide a comment",
+    effect: "Hides the comment on the platform. Its author may still see it.",
+    action: "hide comments",
+    capability: "canHide",
+    withText: false,
+    severity: "warning",
+    visibility: "restricted",
+  },
+  [UNHIDE_INBOX_COMMENT_TOOL]: {
+    title: "Unhide a comment",
+    effect: "Makes the hidden comment visible to everyone again.",
+    action: "unhide comments",
+    capability: "canHide",
+    withText: false,
+    severity: "warning",
+    visibility: "public",
+  },
+  [DELETE_INBOX_COMMENT_TOOL]: {
+    title: "Delete a comment",
+    effect: "Deletes the comment on the platform and in AdaptlyPost. This cannot be undone.",
+    action: "delete comments",
+    capability: "canDelete",
+    withText: false,
+    severity: "critical",
+    visibility: "restricted",
+  },
+};
+
+async function describeCommentAction(
+  cfg: PluginConfig,
+  toolName: string,
+  params: Record<string, unknown>,
+): Promise<ApprovalRequest> {
+  const change = COMMENT_ACTIONS[toolName];
+  const commentId = String(params.comment_id ?? "");
+  const text = change.withText ? requireText(params) : undefined;
+  const [, { item, note }] = await Promise.all([
+    requireInboxReply(cfg, change.action),
+    lookupInboxItem("comment", commentId, async (signal) => {
+      const found = (await callApi(cfg, "GET", `/inbox/comments/${encodeURIComponent(commentId)}`, { signal })) as {
+        comment?: InboxCommentRecord;
+      };
+      return found.comment;
+    }),
+  ]);
+  requireCapability(item, change.capability, "comment");
+
+  const before = [change.effect, ...[inboxAccountLine(item), note].filter(nonEmpty)];
+  const quote = item ? { label: `Comment by ${personLabel(item.author)}`, text: item.text } : undefined;
+  const after = text ? [`Reply: "${text}"`] : [];
+  return {
+    title: change.title,
+    description: inboxPrompt(change.title, before, quote, after, SHORTEN_TEXT),
+    severity: change.severity,
+    scope: { kind: "external-post", target: inboxTarget(item, commentId), visibility: change.visibility },
+  };
+}
+
+async function describeMentionReply(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const mentionId = String(params.mention_id ?? "");
+  const text = requireText(params);
+  const [, { item, note }] = await Promise.all([
+    requireInboxReply(cfg, "reply to mentions"),
+    lookupInboxItem("mention", mentionId, (signal) =>
+      findInRecentList<InboxMentionRecord>(cfg, "/inbox/mentions", "mentions", mentionId, signal),
+    ),
+  ]);
+  requireCapability(item, "canReply", "mention");
+
+  const title = "Reply to a mention";
+  const before = [
+    "Posts this reply publicly to the post that mentioned the account, from the account below. It goes out immediately.",
+    ...[inboxAccountLine(item), note].filter(nonEmpty),
+  ];
+  const quote = item ? { label: `Mention by ${personLabel(item.author)}`, text: item.text } : undefined;
+  return {
+    title,
+    description: inboxPrompt(title, before, quote, [`Reply: "${text}"`], SHORTEN_TEXT),
+    severity: "critical",
+    scope: { kind: "external-post", target: inboxTarget(item, mentionId), visibility: "public" },
+  };
+}
+
+async function describeMessage(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const conversationId = String(params.conversation_id ?? "");
+  const text = requireText(params);
+  const [, { item, note }] = await Promise.all([
+    requireInboxReply(cfg, "send direct messages"),
+    lookupInboxItem("conversation", conversationId, async (signal) =>
+      (await callApi(cfg, "GET", `/inbox/conversations/${encodeURIComponent(conversationId)}`, { signal })) as {
+        conversation?: InboxConversationRecord;
+        messages?: InboxMessageRecord[];
+      },
+    ),
+  ]);
+  const conversation = item?.conversation;
+  requireCapability(conversation, "canReply", "conversation");
+  if (conversation?.replyWindowEndsAt && Date.parse(conversation.replyWindowEndsAt) <= Date.now()) {
+    throw new Error(
+      `The 24-hour reply window of this ${platformLabel(conversation.platform)} conversation closed at ${conversation.replyWindowEndsAt}, so AdaptlyPost would refuse with 400 inbox_messaging_window_closed. Nothing was sent. Tell the user.`,
+    );
+  }
+
+  const lastInbound = [...(item?.messages ?? [])].reverse().find((message) => !message.isOwn);
+  const title = "Send a direct message";
+  const before = [
+    `Sends this message privately to ${conversation ? personLabel(conversation.participant) : `conversation ${conversationId}`}, from the account below. It goes out immediately.`,
+    ...[inboxAccountLine(conversation), note].filter(nonEmpty),
+    ...(conversation?.replyWindowEndsAt ? [`Reply window ends ${conversation.replyWindowEndsAt}.`] : []),
+  ];
+  const quote = lastInbound
+    ? { label: "Their last message", text: nonEmpty(lastInbound.text) ? lastInbound.text : lastInbound.hasAttachments ? "(attachment)" : "" }
+    : undefined;
+  return {
+    title,
+    description: inboxPrompt(title, before, quote, [`Message: "${text}"`], SHORTEN_TEXT),
+    severity: "critical",
+    scope: { kind: "external-post", target: inboxTarget(conversation, conversationId), visibility: "restricted" },
+  };
+}
+
+async function describeReviewAction(
+  cfg: PluginConfig,
+  toolName: string,
+  params: Record<string, unknown>,
+): Promise<ApprovalRequest> {
+  const deleting = toolName === DELETE_INBOX_REVIEW_REPLY_TOOL;
+  const reviewId = String(params.review_id ?? "");
+  const text = deleting ? undefined : requireText(params);
+  const [, { item, note }] = await Promise.all([
+    requireInboxReply(cfg, deleting ? "delete review replies" : "reply to reviews"),
+    lookupInboxItem("review", reviewId, (signal) =>
+      findInRecentList<InboxReviewRecord>(cfg, "/inbox/reviews", "reviews", reviewId, signal),
+    ),
+  ]);
+  if (!deleting) requireCapability(item, "canReply", "review");
+  const currentReply = item?.reply && nonEmpty(item.reply.text) ? item.reply.text : undefined;
+  if (deleting && item && !item.reply) {
+    throw new Error(`Review ${reviewId} has no reply to delete, so nothing was changed.`);
+  }
+
+  const title = deleting ? "Delete a Google review reply" : "Reply to a Google review";
+  const effect = deleting
+    ? "Deletes the business's public reply to this review on Google. The review stays."
+    : currentReply
+      ? "Replaces the business's public reply to this review on Google."
+      : "Posts this public reply to the review on Google, as the business.";
+  const before = [effect, ...[inboxAccountLine(item), note].filter(nonEmpty)];
+  const stars = typeof item?.rating === "number" ? `${item.rating}-star review` : "Review";
+  const quote = item
+    ? { label: `${stars} by ${personLabel(item.reviewer)}`, text: nonEmpty(item.text) ? item.text : "(rating only, no text)" }
+    : undefined;
+  const after = deleting
+    ? currentReply
+      ? [`Reply being deleted: "${shorten(currentReply, INBOX_QUOTE_LIMIT)}"`]
+      : []
+    : [...(currentReply ? [`Current reply: "${shorten(currentReply, 80)}"`] : []), `New reply: "${text}"`];
+  return {
+    title,
+    description: inboxPrompt(title, before, quote, after, SHORTEN_TEXT),
+    severity: deleting ? "warning" : "critical",
+    scope: { kind: "external-post", target: inboxTarget(item, reviewId), visibility: deleting ? "restricted" : "public" },
+  };
+}
+
 export async function describeApproval(
   cfg: PluginConfig,
   toolName: string,
@@ -946,6 +1289,18 @@ export async function describeApproval(
       return describeSeriesChange(cfg, toolName, params);
     case REMOVE_ACCOUNT_TOOL:
       return describeAccountRemoval(cfg, params);
+    case REPLY_INBOX_COMMENT_TOOL:
+    case HIDE_INBOX_COMMENT_TOOL:
+    case UNHIDE_INBOX_COMMENT_TOOL:
+    case DELETE_INBOX_COMMENT_TOOL:
+      return describeCommentAction(cfg, toolName, params);
+    case REPLY_INBOX_MENTION_TOOL:
+      return describeMentionReply(cfg, params);
+    case SEND_INBOX_MESSAGE_TOOL:
+      return describeMessage(cfg, params);
+    case REPLY_INBOX_REVIEW_TOOL:
+    case DELETE_INBOX_REVIEW_REPLY_TOOL:
+      return describeReviewAction(cfg, toolName, params);
     default:
       return undefined;
   }

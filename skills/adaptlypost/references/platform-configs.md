@@ -1,6 +1,6 @@
 # Platform-Specific Configs Reference
 
-Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs`, `tumblrConfigs` and `wordpressConfigs` included), except `linkedinConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take (bulk cannot carry `DOCUMENT` posts). Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
+Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs`, `tumblrConfigs` and `wordpressConfigs` included), except `linkedinConfigs` and `twitterConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take. Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
 
 For bulk scheduling, configs can be set at two levels:
 - **Batch-level** (top-level request body) — applied to all posts as the default
@@ -33,12 +33,12 @@ For bulk scheduling, configs can be set at two levels:
 | --- | --- | --- | --- |
 | `connectionId` | string | **yes** | TikTok account connection ID |
 | `privacyLevel` | string | **yes** | `PUBLIC_TO_EVERYONE`, `MUTUAL_FOLLOW_FRIENDS`, `FOLLOWER_OF_CREATOR`, `SELF_ONLY` |
-| `title` | string | no | Video title (max 90 chars) |
-| `caption` | string | no | TikTok caption: max 2,200 characters on a video, 4,000 on a photo or photo carousel post |
+| `title` | string | no | Max 90 chars. Photo posts: the title shown above the description. Video posts: sent as the caption only when `caption` is empty |
+| `caption` | string | no | Photo posts: the description, max 4,000 characters. Video posts: the caption, max 2,200 characters. Falls back to `title`, then to the post text |
 | `allowComments` | boolean | no | Allow comments on the video |
 | `allowDuet` | boolean | no | Allow duets |
 | `allowStitch` | boolean | no | Allow stitches |
-| `sendAsDraft` | boolean | no | Save as draft in TikTok app |
+| `sendAsDraft` | boolean | no | Deliver to the creator's TikTok inbox as a draft. A video sent this way can reach the inbox without a caption, because TikTok's inbox upload takes none |
 | `aiGenerated` | boolean | no | Mark content as AI-generated |
 | `brandedContent` | boolean | no | Sponsored/partnership content |
 | `brandedContentOwnBrand` | boolean | no | Self-promotional content |
@@ -272,8 +272,34 @@ Only used for `DOCUMENT` posts: one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB
 | --- | --- | --- | --- |
 | `connectionId` | string | **yes** | LinkedIn account connection ID |
 | `documentTitle` | string | no | Title shown on the document (max 100 chars). Defaults to the file name; ignored for other content types |
+| `reshareOf` | string | no | Reshare this LinkedIn post from the account, with the post text as the commentary (max 500 chars). Takes a `urn:li:share:` or `urn:li:ugcPost:` URN, such as the `platformPostId` from `/social-posts/:id/results`, or a link of the form `https://www.linkedin.com/feed/update/<urn>`, which is also the link inside a post's Embed code. `urn:li:activity:` links are refused because LinkedIn cannot reshare them through its API. Media on the post is not attached on this account |
 
-LinkedIn text, image and video posts need no config object.
+```json
+{
+  "contentType": "TEXT",
+  "text": "Our team wrote up how we plan a quarter of content.",
+  "linkedinConnectionIds": ["linkedin-connection-id"],
+  "linkedinConfigs": [{ "connectionId": "linkedin-connection-id", "reshareOf": "urn:li:share:7212345678901234567" }]
+}
+```
+
+Other LinkedIn text, image and video posts need no config object.
+
+## X (Twitter) — `twitterConfigs`
+
+```json
+{
+  "contentType": "TEXT",
+  "text": "Still the most useful thing we shipped this year.",
+  "twitterConnectionIds": ["twitter-connection-id"],
+  "twitterConfigs": [{ "connectionId": "twitter-connection-id", "quoteOf": "https://x.com/adaptlypost/status/1851234567890123456" }]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | X account connection ID, also in `twitterConnectionIds` |
+| `quoteOf` | string | no | Quote one of this account's own X posts, with the post text as the commentary (max 200 chars). Takes a post link such as `https://x.com/<handle>/status/<id>` or the numeric post id, such as the `platformPostId` from `/social-posts/:id/results`. X only lets an account quote posts it wrote or posts that mention it, so a link naming another handle is refused before posting, and any other post fails at publish time. The text is required, media on the post is not attached on this account, and a quote costs the same as any X post |
 
 ## Google Business Profile — `googleBusinessConfigs`
 
@@ -386,11 +412,11 @@ One entry per location in `googleBusinessConnectionIds`. A location without an e
 
 ## Platforms Without Config Objects
 
-These platforms use only connection ID arrays — no additional config:
+These platforms use only connection ID arrays, plus `twitterConfigs` for an X quote:
 
 ### X (Twitter)
 
-- Uses `twitterConnectionIds` array
+- Uses `twitterConnectionIds` array; `twitterConfigs` only for `quoteOf`
 - Character limit: 280
 - Up to 4 images per post
 - No video support via this API
@@ -423,6 +449,7 @@ These platforms use only connection ID arrays — no additional config:
 - Text + images + video supported
 - Carousels: up to 10 images and videos
 - Top-level `threadReplies` with `platform: THREADS` turns the post into a thread of up to 25 replies, 500 characters each, with up to 4 images per reply
+- Top-level `firstComments` with `platform: THREADS` posts a reply of up to 500 characters from the same account; a platform takes a first comment or a thread, not both
 
 ### LinkedIn
 

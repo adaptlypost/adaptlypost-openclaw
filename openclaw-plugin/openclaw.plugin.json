@@ -1,8 +1,8 @@
 {
   "id": "adaptlypost",
   "name": "AdaptlyPost",
-  "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress from OpenClaw, and read how they performed.",
-  "version": "0.25.0",
+  "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress from OpenClaw, read how they performed, and read and answer comments, mentions, direct messages and Google reviews.",
+  "version": "0.26.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -44,7 +44,29 @@
       "adaptlypost_resume_recurring_post",
       "adaptlypost_delete_recurring_post",
       "adaptlypost_analytics_overview",
-      "adaptlypost_post_analytics"
+      "adaptlypost_post_analytics",
+      "adaptlypost_inbox_summary",
+      "adaptlypost_refresh_inbox",
+      "adaptlypost_list_inbox_comments",
+      "adaptlypost_get_inbox_comment",
+      "adaptlypost_reply_inbox_comment",
+      "adaptlypost_hide_inbox_comment",
+      "adaptlypost_unhide_inbox_comment",
+      "adaptlypost_like_inbox_comment",
+      "adaptlypost_unlike_inbox_comment",
+      "adaptlypost_delete_inbox_comment",
+      "adaptlypost_update_inbox_comments_status",
+      "adaptlypost_list_inbox_mentions",
+      "adaptlypost_reply_inbox_mention",
+      "adaptlypost_update_inbox_mentions_status",
+      "adaptlypost_list_inbox_conversations",
+      "adaptlypost_get_inbox_conversation",
+      "adaptlypost_send_inbox_message",
+      "adaptlypost_update_inbox_conversations_status",
+      "adaptlypost_list_inbox_reviews",
+      "adaptlypost_reply_inbox_review",
+      "adaptlypost_delete_inbox_review_reply",
+      "adaptlypost_update_inbox_reviews_status"
     ]
   },
   "toolMetadata": {
@@ -239,6 +261,226 @@
       ]
     },
     "adaptlypost_post_analytics": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_inbox_summary": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_refresh_inbox": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_inbox_comments": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_get_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_reply_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_hide_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_unhide_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_like_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_unlike_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_delete_inbox_comment": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_update_inbox_comments_status": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_inbox_mentions": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_reply_inbox_mention": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_update_inbox_mentions_status": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_inbox_conversations": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_get_inbox_conversation": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_send_inbox_message": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_update_inbox_conversations_status": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_inbox_reviews": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_reply_inbox_review": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_delete_inbox_review_reply": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_update_inbox_reviews_status": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",

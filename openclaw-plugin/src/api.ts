@@ -56,7 +56,7 @@ function buildQuery(params: Record<string, unknown>): string {
 
 export async function callApi(
   cfg: PluginConfig,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   options: { body?: unknown; query?: Record<string, unknown>; signal?: AbortSignal } = {},
 ): Promise<unknown> {
@@ -83,7 +83,7 @@ export async function callApi(
   }
 
   if (!res.ok) {
-    if (res.status === 429) {
+    if (res.status === 429 && errorBody(parsed).code !== "inbox_rate_limited") {
       const retryAfter = res.headers.get("Retry-After");
       throw new Error(
         `AdaptlyPost rate limit reached (600 requests per minute per token).${retryAfter ? ` Retry after ${retryAfter}s.` : ""} Wait rather than retrying immediately.`,
@@ -216,6 +216,20 @@ function describeApiError(
       return `AdaptlyPost refused the post (400 post_validation_failed): ${message.replace(/\.$/, "")}. Nothing was created. Tell the user what each issue says and fix it before calling again; the same post fails the same way. adaptlypost_validate_post shows every account's status without creating anything.`;
     case "subscription_required":
       return `AdaptlyPost refused this call (403 subscription_required): ${message} Retrying will not help; the user has to update the workspace subscription.`;
+    case "inbox_item_not_found":
+      return `AdaptlyPost found no such inbox item (404 inbox_item_not_found): ${message} It was deleted on the platform or belongs to another workspace. Stop; list the inbox again for current ids.`;
+    case "inbox_action_unsupported":
+      return `AdaptlyPost refused this inbox action (400 inbox_action_unsupported): ${message} The platform or this item does not allow it; the item's capabilities say what does. Stop and tell the user.`;
+    case "inbox_reconnect_required":
+      return `AdaptlyPost refused this inbox action (403 inbox_reconnect_required): ${message} The account's connection lacks the permission for this channel or its token expired. Tell the user to reconnect the account in AdaptlyPost; do not retry.`;
+    case "inbox_reply_invalid":
+      return `AdaptlyPost refused the text (400 inbox_reply_invalid): ${message} Nothing was sent. Fix the text with the user and ask them to approve the new version.`;
+    case "inbox_messaging_window_closed":
+      return `AdaptlyPost refused the message (400 inbox_messaging_window_closed): ${message} Facebook and Instagram take a reply only within 24 hours of the person's last message. Nothing was sent. Stop and tell the user.`;
+    case "inbox_rate_limited":
+      return `The platform rate limited AdaptlyPost (429 inbox_rate_limited): ${message} Nothing was sent. Wait a while before trying again, and do not loop.`;
+    case "inbox_platform_error":
+      return `The platform failed (503 inbox_platform_error): ${message} Nothing was confirmed as sent. Try again later, not right away.`;
     default:
       return `AdaptlyPost API ${status}: ${message}`;
   }
@@ -268,6 +282,7 @@ const MIME_BY_EXT: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".png": "image/png",
   ".webp": "image/webp",
+  ".gif": "image/gif",
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
   ".pdf": "application/pdf",
@@ -281,6 +296,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
+  "image/gif": ".gif",
   "video/mp4": ".mp4",
   "video/quicktime": ".mov",
   "application/pdf": ".pdf",
@@ -313,6 +329,7 @@ function sniffMimeType(bytes: Uint8Array, name: string): string | undefined {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   if (ascii(bytes, 0, 8) === "\x89PNG\r\n\x1a\n") return "image/png";
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP") return "image/webp";
+  if (ascii(bytes, 0, 6) === "GIF87a" || ascii(bytes, 0, 6) === "GIF89a") return "image/gif";
   const box = ascii(bytes, 4, 8);
   if (box === "ftyp") return ascii(bytes, 8, 12) === "qt  " ? "video/quicktime" : "video/mp4";
   if (QUICKTIME_ATOMS.has(box)) return "video/quicktime";
@@ -323,7 +340,7 @@ function requireMediaContent(bytes: Uint8Array, source: string, name: string = s
   const mimeType = sniffMimeType(bytes, name);
   if (!mimeType) {
     throw new Error(
-      `${source} is not a JPEG, PNG, WebP, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
+      `${source} is not a JPEG, PNG, WebP, GIF, MP4, QuickTime, PDF, PPT, PPTX, DOC or DOCX file. Its content was checked, and for Office files its extension too.`,
     );
   }
   return mimeType;
@@ -417,7 +434,7 @@ export async function resolveLocalMedia(cfg: PluginConfig, filePath: string): Pr
   const declaredMime = MIME_BY_EXT[extname(requested).toLowerCase()];
   if (!declaredMime) {
     throw new Error(
-      `Unsupported media type for "${filePath}". AdaptlyPost accepts .jpg, .jpeg, .png, .webp, .mp4 and .mov files, and .pdf, .ppt, .pptx, .doc and .docx for LinkedIn documents.`,
+      `Unsupported media type for "${filePath}". AdaptlyPost accepts .jpg, .jpeg, .png, .webp, .gif, .mp4 and .mov files, and .pdf, .ppt, .pptx, .doc and .docx for LinkedIn documents.`,
     );
   }
 

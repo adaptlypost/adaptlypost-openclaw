@@ -1,10 +1,10 @@
 # AdaptlyPost Agent Skill 📬
 
-Schedule and manage social media posts across 14 platforms: Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress — from a single API, and read how they performed. AdaptlyPost is a SaaS tool: no self-hosting required.
+Schedule and manage social media posts across 14 platforms: Instagram, X (Twitter), Bluesky, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress — from a single API, read how they performed, and answer the comments, mentions, direct messages and Google reviews they get. AdaptlyPost is a SaaS tool: no self-hosting required.
 
 The same skill file sits in two places, because OpenClaw and Hermes Agent look for it in different folders. OpenClaw reads `SKILL.md` at the repo root. Hermes reads `skills/adaptlypost/SKILL.md`.
 
-For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typed tools. It asks for approval in code before every upload, scheduled post, live post and retry, so prefer it over the curl skill when you run OpenClaw.
+For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typed tools. It asks for approval in code before every upload, scheduled post, live post, retry, and inbox reply, message, hide or delete, so prefer it over the curl skill when you run OpenClaw.
 
 ## Prerequisites
 

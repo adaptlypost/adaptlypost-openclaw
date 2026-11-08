@@ -2,7 +2,8 @@
 
 Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok,
 YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile,
-Telegram, Tumblr and WordPress, from inside OpenClaw.
+Telegram, Tumblr and WordPress, from inside OpenClaw. Read and answer the
+comments, mentions, direct messages and Google reviews those accounts get.
 
 ## Install
 
@@ -64,6 +65,20 @@ before it runs:
 - publishing a post now
 - retrying failed platforms, which republishes immediately
 
+Inbox writes that other people see, or that remove something, stop for approval
+too: replying to a comment or a mention, sending a direct message, putting or
+deleting a Google review reply, and hiding, unhiding or deleting a comment. The
+prompt shows the exact text, the platform and account, who wrote the item and a
+short quote of it. The plugin reads the comment or conversation first; mentions
+and reviews are found among the 100 most recent. When that lookup fails the
+prompt names the item by id, and an id that does not exist is refused before
+the prompt. A token without `inbox.reply` (Contributor and Viewer), a comment
+whose `capabilities` rule the action out, and a Facebook or Instagram
+conversation whose 24-hour reply window has closed are refused before the
+prompt as well. Liking or unliking a comment, marking items read or done, and
+refreshing the inbox need no approval. Marking and refreshing change nothing
+outside AdaptlyPost, and a like is small and undone with one call.
+
 Unscheduling a post and pausing, resuming or deleting a recurring post also stop
 for approval. The prompt names the series, its schedule, its accounts and its
 text. A token whose role cannot change a scheduled series, or cannot unschedule
@@ -98,7 +113,7 @@ OpenClaw's plugin permission requests docs.
   anywhere else.
 - Local uploads must resolve, symlinks included, to a file inside `mediaDirs`.
   Hidden files and folders are skipped, and a file must really be a JPEG, PNG,
-  WebP, MP4 or QuickTime file. The plugin checks its first bytes, not just the
+  WebP, GIF, MP4 or QuickTime file, or a PDF, PPT, PPTX, DOC or DOCX document. The plugin checks its first bytes, not just the
   name. The size limit is 50 MB per image and 1 GB per video.
 - URL uploads must be `https://` on port 443 without credentials. The plugin
   checks the addresses each connection actually uses, including after each of
@@ -131,10 +146,36 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_analytics_overview` | Views, likes, comments, shares, followers and engagement for a date window, against the previous window. |
 | `adaptlypost_post_analytics` | Per-post metrics, sortable by any metric; top posts and "how did this post do". |
 
-Nineteen tools, fewer than the MCP server exposes. Post editing, deletion,
+Inbox tools:
+
+| tool | what it does |
+|---|---|
+| `adaptlypost_inbox_summary` | Unread counts per channel, and per account whether comments, mentions, messages and reviews are available or need a reconnect. Start here. |
+| `adaptlypost_refresh_inbox` | Queue an inbox sync now instead of waiting for the next 10-minute run. |
+| `adaptlypost_list_inbox_comments` | List comments on the workspace's posts, filtered by account, platform, status, date, text or post. |
+| `adaptlypost_get_inbox_comment` | Read one comment with its parent and replies. |
+| `adaptlypost_reply_inbox_comment` | Reply publicly to a comment. Needs approval. |
+| `adaptlypost_hide_inbox_comment` | Hide a comment on the platform. Needs approval. |
+| `adaptlypost_unhide_inbox_comment` | Make a hidden comment visible again. Needs approval. |
+| `adaptlypost_like_inbox_comment` | Like a comment on Facebook, Bluesky, Mastodon or LinkedIn. |
+| `adaptlypost_unlike_inbox_comment` | Take a like back. |
+| `adaptlypost_delete_inbox_comment` | Delete a comment on the platform. Needs approval. |
+| `adaptlypost_update_inbox_comments_status` | Mark comments unread, read or done in AdaptlyPost. |
+| `adaptlypost_list_inbox_mentions` | List posts that mention the accounts. |
+| `adaptlypost_reply_inbox_mention` | Reply publicly to a mention. Needs approval. |
+| `adaptlypost_update_inbox_mentions_status` | Mark mentions unread, read or done. |
+| `adaptlypost_list_inbox_conversations` | List direct-message conversations. |
+| `adaptlypost_get_inbox_conversation` | Read one conversation with its messages. |
+| `adaptlypost_send_inbox_message` | Send a direct message. Needs approval. |
+| `adaptlypost_update_inbox_conversations_status` | Mark conversations unread, read or done. |
+| `adaptlypost_list_inbox_reviews` | List Google Business Profile reviews, filtered by rating or whether they have a reply. |
+| `adaptlypost_reply_inbox_review` | Put or replace the business's reply to a review. Needs approval. |
+| `adaptlypost_delete_inbox_review_reply` | Delete the business's reply to a review. Needs approval. |
+| `adaptlypost_update_inbox_reviews_status` | Mark reviews unread, read or done. |
+
+Forty-two tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
-per-platform breakdown, sync control) stay out, because an agent picking from
-a long list of near-identical tools picks worse. Those live in the
+per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
 
 ## Things worth knowing
@@ -174,8 +215,13 @@ tags. Find category ids with `adaptlypost_list_wordpress_categories`. Both are
 connected in the AdaptlyPost app.
 
 `firstComments` adds a comment from the same account right after the post goes
-out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Bluesky
-and Mastodon. A failed comment never fails the post.
+out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Threads,
+Bluesky and Mastodon. A failed comment never fails the post.
+
+`linkedinConfigs[].reshareOf` reshares a LinkedIn post from the account, and
+`twitterConfigs[].quoteOf` quotes one of the X account's own posts, each with
+the post text as the commentary. The approval prompt names the post being
+reshared or quoted.
 
 `threadReplies` turns the post into a thread on X, Threads, Bluesky or
 Mastodon: the post opens it, and each text goes out from the same account as a
@@ -183,8 +229,8 @@ reply to the one before, up to 25 replies per platform. `mediaUrls` runs
 parallel to `texts` and gives each reply up to 4 images from
 `adaptlypost_upload_media`, `[]` for a reply without any. A reply with images
 may have no text. Each reply is held to the platform's limit: 280 characters
-on X (more on X Premium), 500 on Threads, 300 on Bluesky and 500 on Mastodon.
-A platform takes a thread or a first comment, not both. Replies start about 10
+on X (more on X Premium), 500 on Threads, 300 on Bluesky and 500 on Mastodon,
+and never more than 25000. A platform takes a thread or a first comment, not both. Replies start about 10
 seconds after the post goes out, and a failed thread never fails the post.
 
 To add music to an Instagram Reel, find an `audioId` with
@@ -227,7 +273,22 @@ reports how often the location was seen, with no numbers per post. Mastodon,
 Telegram, Tumblr and WordPress have no analytics, so they come back empty. Connecting an account
 imports its posts from the last 180 days, and analytics are kept from then on
 while it stays connected. A `null` metric means
-the platform does not report it, which is not the same as zero.
+the platform does not report it, which is not the same as zero. LinkedIn
+personal profiles and Google Business Profile locations, listed in
+`accountActivityConnectionIds`, count their account-wide activity per day
+instead of the posts published in the window, and have no per-post rows.
+
+The inbox collects comments (Facebook, Instagram, Threads, YouTube, Bluesky,
+Mastodon, LinkedIn), mentions (Facebook, Instagram, Threads, Bluesky,
+Mastodon), direct messages (Facebook, Instagram, Bluesky, Mastodon) and Google
+Business Profile reviews. TikTok and X have no inbox. Each connection syncs
+about every 10 minutes. Reading needs any role; answering, hiding, deleting,
+liking and marking need an Editor or Admin token and an active plan. A channel
+marked `RECONNECT_REQUIRED`, or a write refused with `inbox_reconnect_required`,
+means the account has to be reconnected in AdaptlyPost; some Messenger,
+Instagram message and Threads mention permissions are still in platform review.
+Facebook and Instagram take a direct message only within 24 hours of the
+person's last one.
 
 The API allows 600 requests per minute per token. A 429 comes back with
 `Retry-After` and the plugin surfaces it rather than hammering.

@@ -1,8 +1,8 @@
 ---
 name: adaptlypost
-description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, and read their analytics. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, or ask about views, likes, comments, followers or top posts on them. Every delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
+description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, read their analytics, and read and answer the comments, mentions, direct messages and Google reviews they receive. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, ask about views, likes, comments, followers or top posts on them, or read, reply to, hide, like or delete comments, mentions, messages and reviews in the AdaptlyPost inbox. Every reply, message, review reply, hide, delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.28.0
+version: 1.29.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -17,7 +17,7 @@ metadata:
 
 # AdaptlyPost
 
-Schedule social media posts across 14 platforms from one API, then read the numbers back. AdaptlyPost is hosted, so there is nothing to install besides this skill.
+Schedule social media posts across 14 platforms from one API, read the numbers back, and answer the comments, mentions, messages and reviews people send. AdaptlyPost is hosted, so there is nothing to install besides this skill.
 
 ## What this skill touches
 
@@ -25,7 +25,7 @@ Schedule social media posts across 14 platforms from one API, then read the numb
 - Files: only media files the user names, read by `curl --data-binary` in the upload step.
 - Tools: `curl`. Nothing else is installed or run.
 
-The [AdaptlyPost OpenClaw plugin](https://github.com/adaptlypost/adaptlypost-openclaw/tree/main/openclaw-plugin) enforces the rules below in code: uploads, scheduled posts, live posts and retries each pause for an approval prompt, local uploads are limited to the folders listed in its `mediaDirs` setting, and URL uploads refuse private and internal addresses. With plain `curl` the rules depend on you following them.
+The [AdaptlyPost OpenClaw plugin](https://github.com/adaptlypost/adaptlypost-openclaw/tree/main/openclaw-plugin) enforces the rules below in code: uploads, scheduled posts, live posts, retries, and inbox replies, messages, hides and deletes each pause for an approval prompt, local uploads are limited to the folders listed in its `mediaDirs` setting, and URL uploads refuse private and internal addresses. With plain `curl` the rules depend on you following them.
 
 ## Setup
 
@@ -53,9 +53,9 @@ A key carries the workspace role chosen when it was created, and never does more
 | Role | Can | Cannot |
 | --- | --- | --- |
 | `admin` | Everything, including connecting accounts and connect links | — |
-| `editor` | Create, schedule, publish, retry, edit and delete any post; pause, resume and delete recurring posts; upload media; manage webhooks | Connect or disconnect accounts, create connect links |
-| `contributor` | Create and edit its own drafts, upload media, read posts and analytics | Schedule, publish, retry, bulk schedule, create or change recurring posts, delete anything but its own drafts, touch other members' posts, manage webhooks |
-| `viewer` | Read posts, accounts, analytics, webhooks | Any write |
+| `editor` | Create, schedule, publish, retry, edit and delete any post; pause, resume and delete recurring posts; upload media; manage webhooks; read and answer the inbox | Connect or disconnect accounts, create connect links |
+| `contributor` | Create and edit its own drafts, upload media, read posts, analytics and the inbox | Schedule, publish, retry, bulk schedule, create or change recurring posts, delete anything but its own drafts, touch other members' posts, manage webhooks, answer or change anything in the inbox |
+| `viewer` | Read posts, accounts, analytics, webhooks and the inbox | Any write |
 
 `POST /social-posts` and `POST /social-posts/:id/publish` check the role per call. A draft needs `posts.draft`, with or without a planned date. A future `scheduledAt` also needs `posts.schedule`, and publishing now also needs `posts.publish`. On `/publish` without `scheduledAt`, a draft's own future planned date counts as the scheduled time, so that call needs `posts.schedule`. `GET /me` returns the key's `role` and `can: { draft, schedule, publish }`, so check it before asking the user for a time.
 
@@ -81,7 +81,7 @@ On `permission_denied`: stop. Do not retry, do not look for another key, do not 
 
 ## Safety rules — read before any write call
 
-Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry`, `POST /recurring-posts/:id/resume` and `POST /upload-urls` as a high-impact action.
+Posts are public, carry the user's name, and are hard to take back. Treat every `POST /social-posts`, `POST /social-posts/:id/publish`, `POST /social-posts/:id/retry`, `POST /recurring-posts/:id/resume`, `POST /upload-urls` and every inbox reply, message and review reply as a high-impact action.
 
 1. **Confirm before every post.** Before calling `POST /social-posts`, show the user a summary and get an explicit "yes" covering all four items:
    - **Content** — exact text (and per-platform overrides), media filenames, first comments, thread replies with their images, Instagram collaborators, user tags and audio, Google Business Profile event, offer and button
@@ -94,14 +94,15 @@ Posts are public, carry the user's name, and are hard to take back. Treat every 
 4. **Verify media before upload.** Files uploaded via `/upload-urls` are stored at a **public URL** that exists from the moment of upload — before the post goes live, and even if the post is never created. Before calling `/upload-urls`:
    - Confirm the exact file path with the user.
    - Refuse to upload files from directories that may contain unrelated content (`~/Downloads`, `~/Desktop`, screenshot folders, etc.) without an explicit per-file "yes".
-   - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4` or `.mov` image or video, or a `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` file the user named for a LinkedIn `DOCUMENT` post. Key files, `.env` files and config are never media.
+   - Never upload a file the user did not name, a hidden file, or anything that is not a `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.mp4` or `.mov` image or video, or a `.pdf`, `.ppt`, `.pptx`, `.doc` or `.docx` file the user named for a LinkedIn `DOCUMENT` post. Key files, `.env` files and config are never media.
    - Only download media from public `https://` URLs. Refuse `localhost`, private or link-local addresses (`10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, `::1`, `fc00::/7`) and cloud metadata hosts.
 5. **Do not retry failed posts silently.** If a `POST /social-posts` returns an error or unexpected `skippedPlatforms`, surface it to the user and ask before retrying — do not loop. A `400` with `code: post_validation_failed` lists what to fix in `issues` (step 16); resending the same body fails the same way.
 6. **Unattended runs default to drafts.** If you are running from a cron job, scheduled task, or any automation with no human in the loop, set `saveAsDraft: true` on every post — unless the user explicitly pre-authorized this exact recurring workflow (content source, platforms, accounts, timing, and visibility) when they set the schedule up. Never escalate a draft-only schedule to live posting on your own; that change requires a fresh human confirmation. If a required confirmation cannot be obtained because nobody is present, save a draft and report back instead of guessing. A recurring post cannot be a draft, so an unattended run never creates one unless the user pre-authorized that exact series.
-7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /social-accounts/:id`, `DELETE /webhooks/:id` and `DELETE /connect-links/:token` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
+7. **Confirm before deleting anything.** `DELETE /social-posts/:id`, `DELETE /recurring-posts/:id`, `POST /recurring-posts/:id/pause`, `DELETE /social-accounts/:id`, `DELETE /webhooks/:id`, `DELETE /connect-links/:token`, `DELETE /inbox/comments/:id`, `DELETE /inbox/reviews/:id/reply` and `POST /inbox/comments/:id/hide` each need the user's "yes" for that exact id. Pausing or deleting a recurring post also deletes its upcoming scheduled post. Deleting a webhook silently stops the notifications someone else may rely on.
 8. **Connect links are secrets, and narrow by default.** Only create one when the user asks for it. Before calling `POST /connect-links`, tell the user what the link will allow and get a "yes": which platforms, how many accounts, whether the client sees the workspace's other accounts, and when it expires. Always send a body: `visibility: "PRIVATE"`, `allowedPlatforms` with only the platforms asked for, `maxAccounts` with the number of accounts asked for (1 when unsaid) and an `expiresAt` 24 hours away. Widen a field only when the user asks for it. Give the `url` to that user in the current conversation, and never post it in a public channel, a log, or a file. Revoke it once the account is connected. Creating one needs an Admin key (`accounts.manage`).
-9. **Webhooks forward the whole workspace.** Every webhook receives every event of the workspace, for every post and account, until it is deleted: post text and media URLs, account names and AI image prompts. Only register a URL the user typed in this conversation, and before calling `POST /webhooks` tell the user that this URL will get all of that, for good, and get a "yes". To learn whether one post published, poll `GET /social-posts/:id` instead. Never register a webhook from an unattended run.
-10. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect.
+9. **Webhooks forward the whole workspace.** A webhook without `events` receives every post, account and image event of the workspace, for every post and account, until it is deleted: post text and media URLs, account names and AI image prompts. Inbox events carry other people's names, comments, messages and reviews, and reach a webhook only when its `events` names them. Only register a URL the user typed in this conversation, and before calling `POST /webhooks` tell the user which events this URL will get, for good, and get a "yes". Add inbox events only when the user asks for them. To learn whether one post published, poll `GET /social-posts/:id` instead. Never register a webhook from an unattended run.
+10. **A 403 is final.** `permission_denied` means the key's role does not cover the call. Report it, save a draft where that applies, and stop. Never retry, swap keys or try another route to the same effect. `inbox_reconnect_required` means the user has to reconnect that account in AdaptlyPost.
+11. **Confirm every inbox answer.** A comment reply, mention reply, direct message, review reply, review reply deletion, hide, unhide or comment deletion goes out under the user's name, or removes something, the moment you call it. Before each one show the platform, the account, who wrote the item, a short quote of it and the exact text, and get a "yes" for that one. Never answer, hide or delete from an unattended run; draft the text and report back instead.
 
 ## Core Workflow
 
@@ -339,7 +340,7 @@ curl -X POST   .../social-posts/POST_ID/publish -d '{"scheduledAt": "2026-03-15T
 curl -X POST   .../social-posts/POST_ID/publish -d '{"timezone": "UTC", "publishNow": true}'
 ```
 
-`PATCH` works on `DRAFT` and `SCHEDULED` posts only; anything else returns `400` `Cannot edit post in current state`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments`, `threadReplies` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. A `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId` or `boardName`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
+`PATCH` works on `DRAFT` and `SCHEDULED` posts, and on a post that `FAILED` on every platform, which becomes a `DRAFT` again with its platforms back to pending; publish or schedule it with `/publish`. A post that published on some platforms and failed on others (`PARTIAL_FAILURE`) cannot be edited, and any other status returns `400` `Cannot edit post in current state`. `scheduledAt: null` takes the planned date off a `DRAFT` or such a failed post; on a `SCHEDULED` post use `/unschedule` instead. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, and thumbnail fields you omit keep their values. `firstComments`, `threadReplies` and `platformThumbnails` work the same way: sending the array replaces every stored entry, and leaving it out keeps them. A `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception. Sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep (TikTok with `privacyLevel`, Pinterest with `boardId` or `boardName`). `mediaUrls` only take effect together with `platforms`; omit both to leave accounts, configs, and media untouched.
 
 Moving a `SCHEDULED` post more than a minute into the past with `PATCH` returns `400` `The new scheduled time is in the past. Choose a time in the future`. Resending the time it already has is fine, even once that time has passed. To publish it now, call `/publish` without `scheduledAt`.
 
@@ -429,7 +430,7 @@ Never ask a user for a social platform password. This endpoint exists so you nev
 
 ### 14. Get notified instead of polling
 
-A webhook sends every event of the workspace to a URL until it is deleted, so it suits a server the user runs for ongoing notifications, not one post's status. Only register a URL the user typed in this conversation, after they confirm the scope (Safety rule 9). Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
+A webhook sends the workspace's events to a URL until it is deleted, so it suits a server the user runs for ongoing notifications, not one post's status. Only register a URL the user typed in this conversation, after they confirm the scope (Safety rule 9). Creating, changing, testing and deleting webhooks needs an Editor or Admin key (`webhooks.manage`); a Viewer key can list them:
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
@@ -438,7 +439,9 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/webhooks \
   -d '{"url": "https://example.com/hooks/adaptlypost"}'
 ```
 
-Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.failed`, `account.unauthorized` (a connected account's token stopped working; `data.account` names it), and `image.completed` / `image.failed` (an AI image job finished; `data.image` carries it). Every webhook receives every event, so ignore the ones you do not handle.
+Events are `post.scheduled`, `post.published`, `post.partially_failed`, `post.failed`, `account.unauthorized` (a connected account's token stopped working; `data.account` names it), and `image.completed` / `image.failed` (an AI image job finished; `data.image` carries it). The inbox adds `comment.created`, `comment.replied`, `mention.created`, `message.received` and `review.created` (step 17).
+
+`events` on `POST /webhooks` and `PATCH /webhooks/:id` picks what the webhook gets. Omitted or empty, it gets the seven post, account and image events, which is what every existing webhook keeps receiving. Inbox events reach only a webhook whose `events` names them, and a non-empty `events` means only those events, so list the post events too when the user wants both: `{"url": "...", "events": ["post.failed", "comment.created", "message.received"]}`. Inbox events fire for items found after the first sync of a connection, never for the history it imports, and arrive within about 10 minutes. Ignore events you do not handle.
 
 The response contains a `whsec_` signing secret, and that is the only time it is ever returned. Store it then, or delete the webhook and create a new one. Verify every delivery against `x-adaptly-signature` before trusting it: the body is `HMAC-SHA256(secret, "<timestamp>.<raw body>")`. See [references/api-reference.md](references/api-reference.md#webhooks) for the full scheme, headers and retry behaviour.
 
@@ -451,7 +454,7 @@ curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
   "https://post.adaptlypost.com/post/api/v1/analytics/overview?from=2026-08-01&to=2026-08-31"
 ```
 
-Returns `views`, `likes`, `comments`, `shares`, `followers`, `postsCount`, `avgViewsPerPost` and `engagementRate`, each as `{ "value", "previousValue", "deltaPercent" }`, plus `partialMetrics` (metrics some selected platform cannot report) and `lastSyncedAt`. A metric no selected platform reports is `null`; say so rather than reporting zero.
+Returns `views`, `likes`, `comments`, `shares`, `followers`, `postsCount`, `avgViewsPerPost` and `engagementRate`, each as `{ "value", "previousValue", "deltaPercent" }`, plus `partialMetrics` (metrics some selected platform cannot report), `accountActivityConnectionIds` and `lastSyncedAt`. The accounts in `accountActivityConnectionIds` (LinkedIn personal profiles, Google Business Profile locations) count their account-wide activity on each day of the window instead of the lifetime totals of posts published in it, and have no rows in `/analytics/posts`; the platform breakdown carries the same list per platform. Every window endpoint also takes a repeated `connectionIds` filter with account ids from `/social-accounts`. A metric no selected platform reports is `null`; say so rather than reporting zero.
 
 ```bash
 curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
@@ -462,7 +465,7 @@ Per-post metrics for posts published in the window, `{ "posts", "total", "page",
 
 Also available: `/analytics/timeseries?granularity=DAILY|WEEKLY|MONTHLY` for a trend, `/analytics/platform-breakdown` to compare platforms (read `supportedMetrics` before comparing), `/analytics/top-posts` for the top `limit` without pagination, and `/analytics/discovered-posts` for posts found on the accounts that AdaptlyPost did not publish.
 
-Numbers refresh every few hours. If the user just published, `POST /analytics/sync` refreshes now, once per 10 minutes per workspace; inside the cooldown it returns `queued: false` with `cooldownSecondsRemaining`, so do not loop. Then poll `GET /analytics/sync-status` until `syncInProgress` is false. That endpoint also flags `needsAnalyticsReconnect` per account: the account was connected before analytics permissions existed and stays empty until the user reconnects it, so tell them instead of querying again. Full reference in [references/api-reference.md](references/api-reference.md#analytics).
+Numbers refresh every few hours. If the user just published, `POST /analytics/sync` refreshes now, once per 15 minutes per workspace, and skips a YouTube channel read in the last 12 hours. Inside the cooldown, or when no connected account supports analytics, it returns `200` with `queued: false` (with `cooldownSecondsRemaining` inside the cooldown), so do not loop. Then poll `GET /analytics/sync-status` until `syncInProgress` is false. That endpoint also flags `needsAnalyticsReconnect` per account: the account was connected before analytics permissions existed and stays empty until the user reconnects it, so tell them instead of querying again. Full reference in [references/api-reference.md](references/api-reference.md#analytics).
 
 ### 16. Check a post before creating it (dry run)
 
@@ -495,25 +498,79 @@ Every issue is `{ "code", "severity", "message", "platform", "connectionId" }`. 
 
 Run it after the user approved a post with video, TikTok, YouTube, Pinterest or X, or several accounts, and before a bulk schedule. Fix every `ERROR` with the user, mention any `WARNING` and the `notChecked` list in one line, then send the real call. It is never required: `POST /social-posts` runs the same checks, and a post it refuses for its content answers `400` with `code: post_validation_failed` and the same `issues` list. `message` is then one string for one issue, or an array for several. Full reference in [references/api-reference.md](references/api-reference.md#post-social-postsvalidate).
 
+### 17. Read and answer the inbox
+
+The inbox collects what people send the connected accounts: comments on the workspace's posts, mentions, direct messages and Google Business Profile reviews. Use it when the user asks what people said, wants to answer someone, or wants the inbox tidied.
+
+| Channel | Platforms |
+| --- | --- |
+| comments | Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon, LinkedIn |
+| mentions | Facebook, Instagram, Threads, Bluesky, Mastodon |
+| messages | Facebook, Instagram, Bluesky, Mastodon |
+| reviews | Google Business Profile |
+
+TikTok and X have no inbox. Reads need `inbox.read`, which every role holds. Every write, status changes and likes included, needs `inbox.reply` (Editor or Admin) and an active plan; a Contributor or Viewer key gets `403 permission_denied`.
+
+Start with the summary. It gives unread counts per channel and, for each account, `AVAILABLE`, `RECONNECT_REQUIRED` or `UNSUPPORTED` per channel:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  https://post.adaptlypost.com/post/api/v1/inbox/summary
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/inbox/comments?statuses=UNREAD&limit=25"
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  https://post.adaptlypost.com/post/api/v1/inbox/comments/COMMENT_ID
+```
+
+`GET /inbox/comments`, `/inbox/mentions`, `/inbox/conversations` and `/inbox/reviews` list newest first and take `accountIds`, `platforms`, `statuses` (`UNREAD`, `READ`, `DONE`), `since`, `search`, `limit` (1-100, default 25) and `cursor` (the previous page's `nextCursor`). Comments also take `postId` and `platformPostId`; reviews take `ratings` and `replied`. `GET /inbox/comments/:id` returns the comment with its parent and replies, and `GET /inbox/conversations/:id` the conversation with its messages: read them before drafting an answer.
+
+Answering:
+
+```bash
+curl -X POST .../inbox/comments/COMMENT_ID/reply        -d '{"text": "Thanks, glad it helped!"}'
+curl -X POST .../inbox/mentions/MENTION_ID/reply        -d '{"text": "Thank you for the shout-out!"}'
+curl -X POST .../inbox/conversations/CONVERSATION_ID/messages -d '{"text": "We open at 9 tomorrow."}'
+curl -X PUT  .../inbox/reviews/REVIEW_ID/reply          -d '{"text": "Thanks for visiting, Max."}'
+curl -X DELETE .../inbox/reviews/REVIEW_ID/reply
+curl -X POST .../inbox/comments/COMMENT_ID/hide
+curl -X POST .../inbox/comments/COMMENT_ID/unhide
+curl -X POST .../inbox/comments/COMMENT_ID/like
+curl -X DELETE .../inbox/comments/COMMENT_ID/like
+curl -X DELETE .../inbox/comments/COMMENT_ID
+curl -X POST .../inbox/comments/status -d '{"ids": ["COMMENT_ID"], "status": "DONE"}'
+```
+
+- **Confirm before sending (Safety rule 11).** A reply, a mention reply, a message, a review reply, a review reply deletion, a hide, an unhide and a comment deletion each need the user's "yes" for that exact item and text. Show the platform, the account, who wrote the item, a short quote of it, and the exact text you will send. A previous "yes" does not cover the next one. Never answer, hide or delete from an unattended run: draft the text and report back.
+- Likes and status changes (`UNREAD`, `READ`, `DONE`) only touch what the user named. Status changes stay in AdaptlyPost; nothing reaches the platform.
+- Check `capabilities` (`canReply`, `canHide`, `canDelete`, `canLike`) before offering an action. Facebook, Instagram and LinkedIn delete any comment on the account's posts; YouTube, Threads, Bluesky and Mastodon only the account's own replies. Likes work on Facebook, Bluesky, Mastodon and LinkedIn. Anything else answers `400 inbox_action_unsupported`.
+- Text limits: comment and mention replies follow the platform's comment limit (LinkedIn 1250, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200 characters), review replies 4096 bytes, messages the conversation's `maxMessageLength`. Google keeps one reply per review, so `PUT` replaces the current one: say so when there is one. `400 inbox_reply_invalid` means fix the text and confirm again.
+- **Reconnect, do not retry.** A channel marked `RECONNECT_REQUIRED`, or a write answered with `403 inbox_reconnect_required`, means the connection lacks that permission or its token expired. Messenger and Instagram messages and Threads mentions depend on platform permissions still in review, so they often show this. Tell the user to reconnect the account in AdaptlyPost and stop.
+- **24-hour window.** Facebook and Instagram take a message only within 24 hours of the person's last one. `replyWindowEndsAt` on the conversation says when it closes; after that the API answers `400 inbox_messaging_window_closed`. Stop and tell the user.
+- `404 inbox_item_not_found`: the item is gone or belongs to another workspace; list again. `429 inbox_rate_limited`: the platform throttled the call; wait before trying again. `503 inbox_platform_error`: the platform failed; try later, not in a loop.
+- Each connection syncs about every 10 minutes, so a new comment can take that long to appear. `POST /inbox/refresh` queues a sync now and answers `202` with `{ "queued": true }`; list again after a minute, and do not loop on it.
+- To be notified instead, a webhook can opt in to `comment.created`, `comment.replied`, `mention.created`, `message.received` and `review.created` through `events` (step 14).
+
+Full endpoint list, shapes and refusal codes: [references/api-reference.md](references/api-reference.md#inbox).
+
 ## Platform-Specific Configs
 
 Pass these as config arrays in the request body. See [references/platform-configs.md](references/platform-configs.md) for full details.
 
 | Platform | Config Field | Key Options |
 | --- | --- | --- |
-| **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `caption` (up to 2200 characters on a video, 4000 on a photo post), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `brandedContent`, `autoAddMusic` |
+| **TikTok** | `tiktokConfigs` | `privacyLevel` (required), `title` (up to 90; above the description on a photo post, the caption of a video only when `caption` is empty), `caption` (up to 2200 characters on a video, 4000 on a photo post; falls back to `title`, then the post text), `allowComments`, `allowDuet`, `allowStitch`, `sendAsDraft`, `aiGenerated`, `brandedContent`, `brandedContentOwnBrand`, `autoAddMusic` |
 | **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `userTags` (up to 20), `aiGenerated` (AI info label), `audio` (Reels) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background), `imageLayout` and `carouselCards` (link carousel), `aiGenerated` (AI info label, videos only) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
-| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `defaultAudioLanguage` (language of the original audio), `playlistId` |
+| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `defaultAudioLanguage` (language of the original audio), `categoryId`, `playlistId` |
 | **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`) or `boardName` (the board's name on that account), never both; with neither the pin goes to a public "AdaptlyPost" board. `title`, `link` |
-| **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only) |
-| **X (Twitter)** | — | No config object, uses `twitterConnectionIds`; top-level `twitterKeepLinks` keeps links clickable and `threadReplies` turns the post into a thread |
+| **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only), `reshareOf` (reshare a LinkedIn post with the text as commentary) |
+| **X (Twitter)** | `twitterConfigs` | `quoteOf` (quote one of the account's own posts with the text as commentary); top-level `twitterKeepLinks` keeps links clickable and `threadReplies` turns the post into a thread |
 | **Bluesky** | — | No config object, uses `blueskyConnectionIds`; top-level `threadReplies` turns the post into a thread |
 | **Mastodon** | — | No config object, uses `mastodonConnectionIds`; top-level `threadReplies` turns the post into a thread |
 | **Threads** | — | No config object, uses `threadsConnectionIds`; top-level `threadReplies` turns the post into a thread |
 | **Telegram** | — | No config object, uses `telegramConnectionIds` only |
-| **Tumblr** | `tumblrConfigs` | `tags` (up to 30, no commas), `title`, `sourceUrl` |
+| **Tumblr** | `tumblrConfigs` | `tags` (up to 30, each at most 140 characters, no commas), `title`, `sourceUrl` |
 | **WordPress** | `wordpressConfigs` | `title`, `excerpt`, `categoryIds` (from `GET /social-accounts/:id/wordpress-categories`), `tags` |
 
 **Example with TikTok config:**
@@ -590,7 +647,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 ### Tumblr
 
-Put the blog's account `id` in `tumblrConnectionIds`. A Tumblr post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, thumbnails, image shapes or analytics.
+Put the blog's account `id` in `tumblrConnectionIds`. A Tumblr post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video up to 500 MB and 10 minutes, and alt text. `tumblrConfigs` adds up to 30 `tags` (each at most 140 characters, no commas; a leading `#` is stripped and duplicates are dropped), a `title` shown as a heading above the media and the text, and a `sourceUrl` shown as the post's source link. Tumblr has no first comments, thumbnails, image shapes or analytics.
 
 ```bash
 curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
@@ -687,8 +744,8 @@ Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPo
 
 All optional, and each takes at most one entry per platform. A platform the field does not support returns `400`.
 
-- `firstComments`: `[{ "platform": "LINKEDIN", "text": "Sign up at example.com" }]`. Posted from the same account about 10 seconds after the platform publishes (60 on YouTube): a comment on LinkedIn (1250 characters), YouTube (10000), Facebook (8000) and Instagram (2200), a reply on X (280), Bluesky (300) and Mastodon (500). The platform must be one the post goes to and must not also have `threadReplies`. Not for private or made for kids YouTube videos or Facebook and Instagram stories. Retried up to 3 times, except on X, where it is not retried and costs credits like any X post on a lifetime-deal account. A failed comment never fails the post; read `firstCommentStatus` (`PENDING`, `PUBLISHED`, `FAILED`) and `firstCommentError` on the post's platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. Not on the bulk top level; bulk items take it.
-- `threadReplies`: `[{ "platform": "TWITTER", "texts": ["2/ The details", "3/ Sign up at example.com"], "mediaUrls": [["https://.../chart.png"], []] }]`. Turns the post into a thread on X, Threads, Bluesky or Mastodon: the post opens it, and each text goes out from the same account as a reply to the one before. Up to 25 replies per platform, each up to 280 characters on X (more on X Premium), 500 on Threads, 300 on Bluesky and 500 on Mastodon (or the instance's limit). `mediaUrls` is optional and parallel to `texts`: up to 4 JPEG, PNG, GIF or WEBP images per reply, uploaded through `/upload-urls` like the post's own media, and `[]` for a reply without images. A reply with images may have an empty text. Returns `400` for any other platform, a platform the post does not go to, a reply with neither text nor images, a reply over the limit, more than 4 images or a video on a reply, a second entry for one platform, and a platform that also has a first comment, so use one or the other. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out; on X it is not retried, and a lifetime-deal account pays for each reply like any X post. A failed thread never fails the post; read `threadStatus` (`PENDING`, `PUBLISHED`, `FAILED`), `threadReplyIds` and `threadError` on the post's platform entry. Show every reply and its images in the confirmation summary, since each one goes public. Not on the bulk top level; bulk items take it.
+- `firstComments`: `[{ "platform": "LINKEDIN", "text": "Sign up at example.com" }]`. Posted from the same account about 10 seconds after the platform publishes (60 on YouTube): a comment on LinkedIn (1250 characters), YouTube (10000), Facebook (8000) and Instagram (2200), a reply on X (280), Threads (500), Bluesky (300) and Mastodon (500). The platform must be one the post goes to and must not also have `threadReplies`. Not for private or made for kids YouTube videos or Facebook and Instagram stories. Retried up to 3 times, except on X, where it is not retried and costs credits like any X post on a lifetime-deal account. A failed comment never fails the post; read `firstCommentStatus` (`PENDING`, `PUBLISHED`, `FAILED`) and `firstCommentError` on the post's platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. Not on the bulk top level; bulk items take it.
+- `threadReplies`: `[{ "platform": "TWITTER", "texts": ["2/ The details", "3/ Sign up at example.com"], "mediaUrls": [["https://.../chart.png"], []] }]`. Turns the post into a thread on X, Threads, Bluesky or Mastodon: the post opens it, and each text goes out from the same account as a reply to the one before. Up to 25 replies per platform, each up to 280 characters on X (more on X Premium), 500 on Threads, 300 on Bluesky and 500 on Mastodon (or the instance's limit), and never more than 25000. `mediaUrls` is optional and parallel to `texts`: up to 4 JPEG, PNG, GIF or WEBP images per reply, uploaded through `/upload-urls` like the post's own media, and `[]` for a reply without images. A reply with images may have an empty text. Returns `400` for any other platform, a platform the post does not go to, a reply with neither text nor images, a reply over the limit, more than 4 images or a video on a reply, a second entry for one platform, and a platform that also has a first comment, so use one or the other. Replies start about 10 seconds after the platform publishes, 2 seconds apart. A failed run is retried up to 3 times and resumes after the last reply that went out; on X it is not retried, and a lifetime-deal account pays for each reply like any X post. A failed thread never fails the post; read `threadStatus` (`PENDING`, `PUBLISHED`, `FAILED`), `threadReplyIds` and `threadError` on the post's platform entry. Show every reply and its images in the confirmation summary, since each one goes public. Not on the bulk top level; bulk items take it.
 - `platformThumbnails`: `[{ "platform": "YOUTUBE", "thumbnailUrl": "https://..." }]` for `VIDEO` posts. YouTube, Facebook, Instagram, LinkedIn, Pinterest and Telegram take an image or a frame (`thumbnailTimestampMs`, ms from the start), the image winning when both are sent; TikTok takes only a frame. A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`, which work on every one of these platforms; a post-level `thumbnailUrl` sent with a frame wins everywhere except TikTok. Not for Facebook or Instagram stories.
 - `platformAspectRatios`: `[{ "platform": "INSTAGRAM", "aspectRatio": "PORTRAIT", "fit": "PAD" }]` for `IMAGE` and `CAROUSEL` posts. `SQUARE` is 1:1, `PORTRAIT` 4:5, `VERTICAL` 9:16, `LANDSCAPE` 1.91:1. Instagram takes all but `VERTICAL`, TikTok takes all four, and no other platform takes any. `fit` is `CROP` (the default, cut from the center) or `PAD` (keep the whole image and fill the rest with a blurred copy). Not for Instagram stories.
 - `twitterKeepLinks: true`: keeps links in X text clickable. By default every link in X text is broken (`example.com` becomes `example. com`), because X charges over 10 times more for a post with a link. Only AppSumo lifetime deals can turn it on, and a kept link costs 20 credits instead of 2; any other plan gets `400`. `POST /social-posts` and `PATCH` only, not bulk.
@@ -702,6 +759,9 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
 - `facebookConfigs[].imageLayout: "CAROUSEL"` with `carouselCards`: swipeable cards instead of a photo grid, each opening its own link. Send one card per image, in the same order as `mediaUrls`: `{ "link": "https://example.com/a", "title": "Shoes", "description": "New in" }` (`link` required, `title` max 100, `description` max 200). Needs 2 to 5 images, no videos and `postType: FEED`, or the API returns `400`. Facebook shows the card image and title only for links to a website the Page owns; any other link makes the post fail with a message saying so. Leave `imageLayout` out for the usual photo grid.
 - LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
+- `linkedinConfigs[].reshareOf`: reshare a LinkedIn post from the account, with the post text as the commentary. Takes a `urn:li:share:` or `urn:li:ugcPost:` URN (such as a `platformPostId` from `/results`) or a `https://www.linkedin.com/feed/update/<urn>` link; `urn:li:activity:` links are refused. The post's media is not attached on that account.
+- `twitterConfigs[].quoteOf`: quote one of the X account's own posts, with the post text as the commentary: a `https://x.com/<handle>/status/<id>` link or the numeric id. X only lets an account quote its own posts or posts that mention it, so a link naming another handle is refused before posting. The text is required and the post's media is not attached. `POST /social-posts` and `PATCH` only, like `linkedinConfigs`.
+- `accountIds`: account `id`s from `/social-accounts` that AdaptlyPost sorts into `platforms` and the per-platform connection lists for you, instead of or alongside them. `POST /social-posts` only.
 
 ## Supported File Types for Upload
 
@@ -710,6 +770,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 | `image/jpeg` | .jpg, .jpeg | Images |
 | `image/png` | .png | Images |
 | `image/webp` | .webp | Images |
+| `image/gif` | .gif | Images on Facebook, X, Bluesky, Mastodon, LinkedIn and Tumblr; other platforms refuse them when the post is created |
 | `video/mp4` | .mp4 | Videos |
 | `video/quicktime` | .mov | Videos |
 | `application/pdf` | .pdf | LinkedIn documents |
@@ -718,7 +779,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 | `application/msword` | .doc | LinkedIn documents |
 | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | .docx | LinkedIn documents |
 
-Upload 1-20 files per request. Keep the file extension in `fileName`: a post reads the document type from it.
+Upload 1-20 files per request. Keep the file extension in `fileName`: a post reads the file type from it.
 
 ## Media Specs Quick Reference
 

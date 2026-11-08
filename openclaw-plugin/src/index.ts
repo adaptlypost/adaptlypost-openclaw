@@ -13,13 +13,21 @@ import {
   ApprovalLedger,
   buildPostBody,
   CREATE_POST_TOOL,
+  DELETE_INBOX_COMMENT_TOOL,
+  DELETE_INBOX_REVIEW_REPLY_TOOL,
   DELETE_RECURRING_TOOL,
   describeApproval,
   GATED_TOOLS,
+  HIDE_INBOX_COMMENT_TOOL,
   PAUSE_RECURRING_TOOL,
   REMOVE_ACCOUNT_TOOL,
+  REPLY_INBOX_COMMENT_TOOL,
+  REPLY_INBOX_MENTION_TOOL,
+  REPLY_INBOX_REVIEW_TOOL,
   RESUME_RECURRING_TOOL,
   RETRY_TOOL,
+  SEND_INBOX_MESSAGE_TOOL,
+  UNHIDE_INBOX_COMMENT_TOOL,
   UNSCHEDULE_TOOL,
   UPLOAD_TOOL,
 } from "./approvals.js";
@@ -133,6 +141,11 @@ const AnalyticsRangeFields = {
         "Restrict to these platforms; omit for every platform with analytics. MASTODON, TELEGRAM, TUMBLR and WORDPRESS have none and are ignored.",
     }),
   ),
+  connectionIds: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Restrict to these accounts, by the id from adaptlypost_accounts; omit for every account.",
+    }),
+  ),
 };
 
 const ConnectionIdFields = {
@@ -188,15 +201,30 @@ const PlatformConfigFields = {
           Type.Literal("FOLLOWER_OF_CREATOR"),
           Type.Literal("SELF_ONLY"),
         ]),
-        title: Type.Optional(Type.String({ maxLength: 90 })),
+        title: Type.Optional(
+          Type.String({
+            maxLength: 90,
+            description:
+              "Photo posts: the title shown above the description. Video posts: sent as the caption only when caption is empty.",
+          }),
+        ),
         caption: Type.Optional(
           Type.String({
             maxLength: 4000,
-            description: "TikTok caption: up to 2200 characters on a video, 4000 on a photo or photo carousel post.",
+            description:
+              "Photo posts: the description, up to 4000 characters. Video posts: the caption, up to 2200 characters. Falls back to title, then to the post text. A video sent with sendAsDraft can reach the TikTok inbox without a caption, because TikTok's inbox upload takes none.",
           }),
         ),
-        sendAsDraft: Type.Optional(Type.Boolean()),
-        aiGenerated: Type.Optional(Type.Boolean()),
+        allowComments: Type.Optional(Type.Boolean()),
+        allowDuet: Type.Optional(Type.Boolean()),
+        allowStitch: Type.Optional(Type.Boolean()),
+        sendAsDraft: Type.Optional(
+          Type.Boolean({ description: "Deliver to the creator's TikTok inbox as a draft instead of publishing." }),
+        ),
+        aiGenerated: Type.Optional(Type.Boolean({ description: "Mark the content as AI-generated." })),
+        brandedContent: Type.Optional(Type.Boolean({ description: "Paid partnership promoting another brand." })),
+        brandedContentOwnBrand: Type.Optional(Type.Boolean({ description: "Promotes the creator's own business." })),
+        autoAddMusic: Type.Optional(Type.Boolean({ description: "Photo posts: let TikTok add background music." })),
       }),
       { description: "Required for TikTok: each entry needs connectionId and privacyLevel, which has no default." },
     ),
@@ -207,9 +235,13 @@ const PlatformConfigFields = {
         connectionId: Type.String(),
         postType: Type.Optional(Type.Union([Type.Literal("VIDEO"), Type.Literal("SHORTS")])),
         videoTitle: Type.Optional(Type.String({ maxLength: 100 })),
+        tags: Type.Optional(Type.Array(Type.String(), { maxItems: 20, description: "Video tags." })),
         privacyStatus: Type.Optional(
           Type.Union([Type.Literal("public"), Type.Literal("private"), Type.Literal("unlisted")]),
         ),
+        license: Type.Optional(Type.Union([Type.Literal("youtube"), Type.Literal("creativeCommon")])),
+        notifySubscribers: Type.Optional(Type.Boolean()),
+        allowEmbedding: Type.Optional(Type.Boolean()),
         madeForKids: Type.Optional(Type.Boolean()),
         aiGenerated: Type.Optional(
           Type.Boolean({
@@ -226,6 +258,8 @@ const PlatformConfigFields = {
             },
           ),
         ),
+        categoryId: Type.Optional(Type.String({ description: "YouTube video category id, such as 22." })),
+        playlistId: Type.Optional(Type.String({ description: "Playlist the video is added to after publishing." })),
       }),
       { description: "YouTube uploads without a videoTitle publish under the caption text." },
     ),
@@ -377,8 +411,33 @@ const PlatformConfigFields = {
             description: "Title LinkedIn shows on a DOCUMENT post. Defaults to the file name.",
           }),
         ),
+        reshareOf: Type.Optional(
+          Type.String({
+            maxLength: 500,
+            description:
+              "Reshare this LinkedIn post from the account, with the post text as the commentary. Takes a urn:li:share: or urn:li:ugcPost: URN (such as a platformPostId from adaptlypost_post_results) or a https://www.linkedin.com/feed/update/<urn> link. urn:li:activity: links are refused. The post's media is not attached on this account.",
+          }),
+        ),
       }),
-      { description: "LinkedIn per-connection config, only used by DOCUMENT posts. connectionId must match linkedinConnectionIds." },
+      {
+        description:
+          "LinkedIn per-connection config: documentTitle for DOCUMENT posts, reshareOf for a reshare. connectionId must match linkedinConnectionIds.",
+      },
+    ),
+  ),
+  twitterConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String({ description: "An id from twitterConnectionIds." }),
+        quoteOf: Type.Optional(
+          Type.String({
+            maxLength: 200,
+            description:
+              "Quote one of this account's own X posts, with the post text as the commentary: a https://x.com/<handle>/status/<id> link or the numeric post id (such as a platformPostId from adaptlypost_post_results). X only lets an account quote posts it wrote or posts that mention it, so a link naming another handle is refused before posting. The text is required, the post's media is not attached on this account, and a quote costs the same as any X post.",
+          }),
+        ),
+      }),
+      { description: "X per-account options. connectionId must match an entry in twitterConnectionIds." },
     ),
   ),
   pinterestConfigs: Type.Optional(
@@ -504,6 +563,7 @@ const FirstComment = Type.Object({
   platform: Type.Union([
     Type.Literal("LINKEDIN"),
     Type.Literal("TWITTER"),
+    Type.Literal("THREADS"),
     Type.Literal("BLUESKY"),
     Type.Literal("MASTODON"),
     Type.Literal("YOUTUBE"),
@@ -514,7 +574,7 @@ const FirstComment = Type.Object({
     minLength: 1,
     maxLength: 10000,
     description:
-      "Comment text. Limits: LINKEDIN 1250, TWITTER 280, BLUESKY 300, MASTODON 500, YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200 characters.",
+      "Comment text. Limits: LINKEDIN 1250, TWITTER 280, THREADS 500, BLUESKY 300, MASTODON 500, YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200 characters.",
   }),
 });
 
@@ -528,13 +588,13 @@ const ThreadReplies = Type.Object({
   texts: Type.Array(Type.String({ maxLength: 25000 }), {
     maxItems: 25,
     description:
-      "The replies in order, each trimmed. Limits per reply: TWITTER 280 (more on X Premium), THREADS 500, BLUESKY 300, MASTODON 500 (or the instance's limit) characters. A reply with images may be an empty string.",
+      "The replies in order, each trimmed. Limits per reply: TWITTER 280 (more on X Premium), THREADS 500, BLUESKY 300, MASTODON 500 (or the instance's limit) characters, and never more than 25000. A reply with images may be an empty string.",
   }),
   mediaUrls: Type.Optional(
     Type.Array(Type.Array(Type.String(), { maxItems: 4 }), {
       maxItems: 25,
       description:
-        "Parallel to texts: the publicUrl values from adaptlypost_upload_media for each reply, up to 4 images (JPEG, PNG or WebP through the upload tool), and [] for a reply without images. No video.",
+        "Parallel to texts: the publicUrl values from adaptlypost_upload_media for each reply, up to 4 images (JPEG, PNG, GIF or WebP), and [] for a reply without images. No video.",
     }),
   ),
 });
@@ -609,7 +669,7 @@ const PostParameters = Type.Object({
   firstComments: Type.Optional(
     Type.Array(FirstComment, {
       description:
-        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Bluesky and Mastodon. The platform must be in platforms and must not also have threadReplies. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
+        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms and must not also have threadReplies. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
     }),
   ),
   threadReplies: Type.Optional(
@@ -681,11 +741,57 @@ const PostParameters = Type.Object({
   ...PlatformConfigFields,
 });
 
+const COMMENT_PLATFORMS = ["FACEBOOK", "INSTAGRAM", "THREADS", "YOUTUBE", "BLUESKY", "MASTODON", "LINKEDIN"];
+const MENTION_PLATFORMS = ["FACEBOOK", "INSTAGRAM", "THREADS", "BLUESKY", "MASTODON"];
+const MESSAGE_PLATFORMS = ["FACEBOOK", "INSTAGRAM", "BLUESKY", "MASTODON"];
+const REVIEW_PLATFORMS = ["GOOGLE_BUSINESS"];
+
+const InboxStatus = Type.Union([Type.Literal("UNREAD"), Type.Literal("READ"), Type.Literal("DONE")]);
+
+function inboxListFields(platforms: string[]) {
+  return {
+    accountIds: Type.Optional(
+      Type.Array(Type.String(), { maxItems: 50, description: "Only these accounts, by the id from adaptlypost_accounts." }),
+    ),
+    platforms: Type.Optional(
+      Type.Array(Type.Union(platforms.map((platform) => Type.Literal(platform))), {
+        description: `Only these platforms: ${platforms.join(", ")}.`,
+      }),
+    ),
+    statuses: Type.Optional(
+      Type.Array(InboxStatus, { description: "Only items with these inbox statuses. Omit for every status." }),
+    ),
+    since: Type.Optional(
+      Type.String({ description: "ISO 8601 date-time: only items created on the platform at or after it." }),
+    ),
+    search: Type.Optional(Type.String({ description: "Free-text search." })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: "1 to 100, defaults to 25." })),
+    cursor: Type.Optional(
+      Type.String({ description: "nextCursor from the previous page. nextCursor is null on the last page." }),
+    ),
+  };
+}
+
+const InboxStatusUpdate = Type.Object({
+  ids: Type.Array(Type.String(), { minItems: 1, maxItems: 100, description: "1 to 100 item ids from the matching list." }),
+  status: InboxStatus,
+});
+
+const CommentId = Type.String({
+  description: "Inbox comment id from adaptlypost_list_inbox_comments (the id field, not platformCommentId).",
+});
+const MentionId = Type.String({ description: "Inbox mention id from adaptlypost_list_inbox_mentions." });
+const ConversationId = Type.String({ description: "Conversation id from adaptlypost_list_inbox_conversations." });
+const ReviewId = Type.String({ description: "Review id from adaptlypost_list_inbox_reviews." });
+
+const INBOX_WRITE_NOTE =
+  "Inbox writes need an Editor or Admin key (inbox.reply) and an active plan; other roles get 403 permission_denied. A 403 inbox_reconnect_required means the account's connection lacks the permission for this channel (some Meta and Threads permissions are still in platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry.";
+
 export default definePluginEntry({
   id: "adaptlypost",
   name: "AdaptlyPost",
   description:
-    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress, and read how they performed.",
+    "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress, read how they performed, and read and answer comments, mentions, direct messages and Google reviews.",
   register(api) {
     const cfg = (): PluginConfig => readConfig(api as { config?: unknown });
     const approvals = new ApprovalLedger();
@@ -847,7 +953,7 @@ export default definePluginEntry({
       name: UPLOAD_TOOL,
       label: "AdaptlyPost: upload media",
       description:
-        "Upload images, videos or documents to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension). Limits: 50 MB per image, 1 GB per local video, 100 MB per document, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse.",
+        "Upload images, videos or documents to AdaptlyPost storage and return public URLs for adaptlypost_create_post mediaUrls. Every call pauses for the user's approval, because stored files are public immediately, post or no post; only upload files the user named. Two sources, combinable in one call: file_paths (files inside the folders the user listed in the plugin's mediaDirs setting; hidden files are refused) and urls (public https URLs the plugin downloads and re-hosts; private and internal addresses are refused). Accepts JPEG, PNG, WebP, GIF, MP4 and QuickTime, plus PDF, PPT, PPTX, DOC and DOCX for LinkedIn DOCUMENT posts, checked by file content (and, for Office files, the extension). Limits: 50 MB per image, 1 GB per local video, 100 MB per document, 250 MB per URL. A post referencing media that was never uploaded fails with 'Media file(s) not found in storage'. Returns uploaded ({ publicUrl, key } per file) and mediaUrls; pass mediaUrls straight into the post. One publicUrl may be reused across any number of posts; the file is kept until the last post referencing it has published, so upload once and reuse.",
       parameters: Type.Object({
         file_paths: Type.Optional(
           Type.Array(Type.String(), {
@@ -889,7 +995,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Tumblr (TUMBLR) takes tags, a title and a source link through tumblrConfigs. WordPress (WORDPRESS) publishes the text as a blog post; set the title, excerpt, categories (ids from adaptlypost_list_wordpress_categories) and tags with wordpressConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image or a frame as its thumbnail through platformThumbnails. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). The approval prompt also shows first comments, thread replies with their image counts, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, Tumblr and WordPress titles, categories and tags, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Tumblr (TUMBLR) takes tags, a title and a source link through tumblrConfigs. WordPress (WORDPRESS) publishes the text as a blog post; set the title, excerpt, categories (ids from adaptlypost_list_wordpress_categories) and tags with wordpressConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image or a frame as its thumbnail through platformThumbnails. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>). To reshare a LinkedIn post use linkedinConfigs[].reshareOf; to quote one of the X account's own posts use twitterConfigs[].quoteOf. The approval prompt also shows first comments, thread replies with their image counts, LinkedIn reshares, X quotes, YouTube tags and playlists, TikTok interaction settings, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, Tumblr and WordPress titles, categories and tags, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: PostParameters,
       async execute(toolCallId, params, signal) {
         const post = params as Record<string, unknown> & { mode: string };
@@ -1127,7 +1233,7 @@ export default definePluginEntry({
       name: "adaptlypost_analytics_overview",
       label: "AdaptlyPost: analytics overview",
       description:
-        "Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use it for 'how did we do this month' and follower questions. partialMetrics names metrics some selected platform cannot report; a metric no platform reports is null, so say so rather than reporting zero. Connecting an account imports its posts from the last 180 days, and numbers refresh every few hours (lastSyncedAt says when). Google Business Profile reports only how often the location was seen (impressions); Mastodon and Telegram have no analytics. Not for delivery status: adaptlypost_post_results answers 'did it publish', this answers 'how did it do'.",
+        "Workspace-wide performance for a date window: views, likes, comments, shares, followers, posts published, average views per post and engagement rate, each as { value, previousValue, deltaPercent } against the window of the same length just before it. Use it for 'how did we do this month' and follower questions. partialMetrics names metrics some selected platform cannot report; a metric no platform reports is null, so say so rather than reporting zero. Connecting an account imports its posts from the last 180 days, and numbers refresh every few hours (lastSyncedAt says when). Google Business Profile reports only how often the location was seen (impressions); Mastodon, Telegram, Tumblr and WordPress have no analytics. accountActivityConnectionIds lists accounts (LinkedIn personal profiles, Google Business Profile locations) counted by their account-wide activity on each day of the window instead of the lifetime totals of posts published in it; they have no rows in adaptlypost_post_analytics. Not for delivery status: adaptlypost_post_results answers 'did it publish', this answers 'how did it do'.",
       parameters: Type.Object(AnalyticsRangeFields),
       async execute(_toolCallId, params, signal) {
         return jsonResult(
@@ -1143,7 +1249,7 @@ export default definePluginEntry({
       name: "adaptlypost_post_analytics",
       label: "AdaptlyPost: per-post analytics",
       description:
-        "Per-post metrics for posts published inside a date window, sorted by a metric or by publish date, paginated. Use it for 'top posts', 'which post got the most comments' and 'how did post X do'. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, permalink, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Posts published outside AdaptlyPost are included with postId null. Google Business Profile posts are listed with every metric null, because Google reports only location-level impressions. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review.",
+        "Per-post metrics for posts published inside a date window, sorted by a metric or by publish date, paginated. Use it for 'top posts', 'which post got the most comments' and 'how did post X do'. Returns { posts, total, page, limit, hasMore }; each post has platform, publishedAt, title, permalink, connectionId, accountName and metrics { views, likes, comments, shares, saves, clicks, impressions, reach, engagementRate }, with null for metrics the platform does not report. Posts published outside AdaptlyPost are included with postId null. Google Business Profile posts are listed with every metric null, because Google reports only location-level impressions. Sort by VIEWS with a small limit for a top list; PUBLISHED_AT (default) for a chronological review.",
       parameters: Type.Object({
         ...AnalyticsRangeFields,
         sortBy: Type.Optional(AnalyticsSortMetric),
@@ -1159,6 +1265,318 @@ export default definePluginEntry({
             signal,
           }),
         );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_inbox_summary",
+      label: "AdaptlyPost: inbox summary",
+      description:
+        "Start here for the inbox. Returns { unread { comments, mentions, conversations, reviews }, accounts } where each account has accountId, platform, accountName, avatarUrl, needsReconnect, lastSyncedAt, lastErrorCode and, per channel (comments, mentions, messages, reviews), AVAILABLE, RECONNECT_REQUIRED or UNSUPPORTED. Comments come from Facebook, Instagram, Threads, YouTube, Bluesky, Mastodon and LinkedIn; mentions from Facebook, Instagram, Threads, Bluesky and Mastodon; direct messages from Facebook, Instagram, Bluesky and Mastodon; reviews from Google Business Profile. TikTok and X have no inbox. RECONNECT_REQUIRED means the connection lacks that channel's permission (Messenger and Instagram messages and Threads mentions depend on permissions still in platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost. Each connection syncs about every 10 minutes, so new items can be up to 10 minutes old; adaptlypost_refresh_inbox asks for a sync now. Takes no arguments.",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal) {
+        return jsonResult(await callApi(cfg(), "GET", "/inbox/summary", { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_refresh_inbox",
+      label: "AdaptlyPost: refresh the inbox",
+      description:
+        "Queue an inbox sync for every connected account now, instead of waiting for the next 10-minute run. Returns { queued: true } at once; the sync runs in the background, so list the inbox again after a minute. Do not call it in a loop. Needs only inbox.read, which every role holds.",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/inbox/refresh", { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_inbox_comments",
+      label: "AdaptlyPost: list inbox comments",
+      description:
+        "List comments left on the workspace's posts, newest first. Returns { comments, total, hasMore, nextCursor }; each comment has id, accountId, platform, accountName, postId (null when the post was not published through AdaptlyPost), platformPostId, postText, postPermalink, platformCommentId, parentPlatformCommentId, isReply, author { id, name, username, avatarUrl }, text, permalink, likeCount, createdAt, status (UNREAD, READ or DONE), isHidden, isOwn, replied, repliedAt, likedByAccount and capabilities { canReply, canHide, canDelete, canLike }. Check capabilities before offering an action: a platform or comment that does not allow it answers 400 inbox_action_unsupported. Page with cursor while hasMore is true. postId takes an id from adaptlypost_list_posts; platformPostId the platform's own post id.",
+      parameters: Type.Object({
+        ...inboxListFields(COMMENT_PLATFORMS),
+        postId: Type.Optional(Type.String({ description: "Only comments on this AdaptlyPost post." })),
+        platformPostId: Type.Optional(Type.String({ description: "Only comments on this post id on the platform." })),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/inbox/comments", { query: params as Record<string, unknown>, signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_get_inbox_comment",
+      label: "AdaptlyPost: get an inbox comment",
+      description:
+        "Get one comment with its thread: { comment, parent, replies }, each in the shape of adaptlypost_list_inbox_comments entries; parent is null for a top-level comment. Use it to read the conversation before drafting a reply. Fails with 404 inbox_item_not_found for an unknown id.",
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(_toolCallId, params, signal) {
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(await callApi(cfg(), "GET", `/inbox/comments/${encodeURIComponent(commentId)}`, { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: REPLY_INBOX_COMMENT_TOOL,
+      label: "AdaptlyPost: reply to a comment",
+      description: `Reply publicly to a comment from the account it was left on. The reply goes out immediately under the user's name, so every call pauses for the user's approval of the exact text; draft it with the user first. Limits follow the platform's comment limit: LinkedIn 1250, Threads 500, Bluesky 300, Mastodon 500, YouTube 10000, Facebook 8000, Instagram 2200 characters; empty or too long text answers 400 inbox_reply_invalid. Returns the new reply as an inbox comment. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({
+        comment_id: CommentId,
+        text: Type.String({ minLength: 1, description: "The reply text, exactly as the user approved it." }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REPLY_INBOX_COMMENT_TOOL, params);
+        const { comment_id: commentId, text } = params as { comment_id: string; text: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/comments/${encodeURIComponent(commentId)}/reply`, {
+            body: { text },
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: HIDE_INBOX_COMMENT_TOOL,
+      label: "AdaptlyPost: hide a comment",
+      description: `Hide a comment on the platform, where capabilities.canHide allows it. Every call pauses for the user's approval. Returns the updated comment with isHidden true. Undo with adaptlypost_unhide_inbox_comment. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, HIDE_INBOX_COMMENT_TOOL, params);
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/comments/${encodeURIComponent(commentId)}/hide`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: UNHIDE_INBOX_COMMENT_TOOL,
+      label: "AdaptlyPost: unhide a comment",
+      description: `Make a hidden comment visible again. Every call pauses for the user's approval. Returns the updated comment with isHidden false. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, UNHIDE_INBOX_COMMENT_TOOL, params);
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/comments/${encodeURIComponent(commentId)}/unhide`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_like_inbox_comment",
+      label: "AdaptlyPost: like a comment",
+      description: `Like a comment from the account, where capabilities.canLike allows it: Facebook, Bluesky, Mastodon (a favourite) and LinkedIn. Other platforms answer 400 inbox_action_unsupported. Returns the updated comment with likedByAccount true. Like only the comments the user asked for. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(_toolCallId, params, signal) {
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/comments/${encodeURIComponent(commentId)}/like`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_unlike_inbox_comment",
+      label: "AdaptlyPost: unlike a comment",
+      description: `Take back the account's like on a comment. Returns the updated comment with likedByAccount false. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(_toolCallId, params, signal) {
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(
+          await callApi(cfg(), "DELETE", `/inbox/comments/${encodeURIComponent(commentId)}/like`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: DELETE_INBOX_COMMENT_TOOL,
+      label: "AdaptlyPost: delete a comment",
+      description: `Delete a comment on the platform and in AdaptlyPost, where capabilities.canDelete allows it. Facebook, Instagram and LinkedIn delete any comment on the account's posts; YouTube, Threads, Bluesky and Mastodon only the account's own replies. Irreversible, so every call pauses for the user's approval; prefer adaptlypost_hide_inbox_comment when the user may want it back. Returns { deleted: true }. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ comment_id: CommentId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, DELETE_INBOX_COMMENT_TOOL, params);
+        const { comment_id: commentId } = params as { comment_id: string };
+        return jsonResult(await callApi(cfg(), "DELETE", `/inbox/comments/${encodeURIComponent(commentId)}`, { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_update_inbox_comments_status",
+      label: "AdaptlyPost: mark comments",
+      description: `Set the inbox status of 1 to 100 comments to UNREAD, READ or DONE. Only AdaptlyPost's inbox changes; nothing is sent to the platform. Returns { comments, unreadCount }. ${INBOX_WRITE_NOTE}`,
+      parameters: InboxStatusUpdate,
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/inbox/comments/status", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_inbox_mentions",
+      label: "AdaptlyPost: list inbox mentions",
+      description:
+        "List posts that mention the workspace's accounts, newest first. Returns { mentions, total, hasMore, nextCursor }; each mention has id, accountId, platform, accountName, platformMentionId, author { id, name, username, avatarUrl }, text, permalink, thumbnailUrl, createdAt, status (UNREAD, READ or DONE), replied, repliedAt, capabilities { canReply } and replies [{ id, text, permalink, createdAt }]. Mentions come from Facebook, Instagram, Threads, Bluesky and Mastodon. Page with cursor while hasMore is true.",
+      parameters: Type.Object(inboxListFields(MENTION_PLATFORMS)),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/inbox/mentions", { query: params as Record<string, unknown>, signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: REPLY_INBOX_MENTION_TOOL,
+      label: "AdaptlyPost: reply to a mention",
+      description: `Reply publicly to a post that mentioned the account. The reply goes out immediately, so every call pauses for the user's approval of the exact text. Limits follow the platform's comment limit (Threads 500, Bluesky 300, Mastodon 500, Facebook 8000, Instagram 2200 characters); empty or too long text answers 400 inbox_reply_invalid. Returns the updated mention. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({
+        mention_id: MentionId,
+        text: Type.String({ minLength: 1, description: "The reply text, exactly as the user approved it." }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REPLY_INBOX_MENTION_TOOL, params);
+        const { mention_id: mentionId, text } = params as { mention_id: string; text: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/mentions/${encodeURIComponent(mentionId)}/reply`, {
+            body: { text },
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_update_inbox_mentions_status",
+      label: "AdaptlyPost: mark mentions",
+      description: `Set the inbox status of 1 to 100 mentions to UNREAD, READ or DONE. Nothing is sent to the platform. Returns { mentions, unreadCount }. ${INBOX_WRITE_NOTE}`,
+      parameters: InboxStatusUpdate,
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/inbox/mentions/status", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_inbox_conversations",
+      label: "AdaptlyPost: list direct messages",
+      description:
+        "List direct-message conversations, most recent message first. Returns { conversations, total, hasMore, nextCursor }; each has id, accountId, platform, accountName, participant { id, name, username, avatarUrl }, lastMessageText, lastMessageAt, lastMessageIsOwn, status (UNREAD, READ or DONE), repliedAt, replyWindowEndsAt, maxMessageLength and capabilities { canReply }. Messages come from Facebook, Instagram, Bluesky and Mastodon. On Facebook and Instagram a reply is only possible until replyWindowEndsAt, 24 hours after the person's last message; it is null elsewhere. Page with cursor while hasMore is true.",
+      parameters: Type.Object(inboxListFields(MESSAGE_PLATFORMS)),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/inbox/conversations", { query: params as Record<string, unknown>, signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_get_inbox_conversation",
+      label: "AdaptlyPost: read a conversation",
+      description:
+        "Get one conversation with its messages: { conversation, messages } where each message has id, isOwn, text, hasAttachments and createdAt. Read it before drafting a reply. Fails with 404 inbox_item_not_found for an unknown id.",
+      parameters: Type.Object({ conversation_id: ConversationId }),
+      async execute(_toolCallId, params, signal) {
+        const { conversation_id: conversationId } = params as { conversation_id: string };
+        return jsonResult(
+          await callApi(cfg(), "GET", `/inbox/conversations/${encodeURIComponent(conversationId)}`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: SEND_INBOX_MESSAGE_TOOL,
+      label: "AdaptlyPost: send a direct message",
+      description: `Send a direct message in a conversation, from the account it belongs to. It goes out immediately, so every call pauses for the user's approval of the exact text. The text must fit the conversation's maxMessageLength (400 inbox_reply_invalid otherwise). On Facebook and Instagram, after replyWindowEndsAt the call answers 400 inbox_messaging_window_closed: stop and tell the user. Returns { conversation, message }. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({
+        conversation_id: ConversationId,
+        text: Type.String({ minLength: 1, description: "The message text, exactly as the user approved it." }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, SEND_INBOX_MESSAGE_TOOL, params);
+        const { conversation_id: conversationId, text } = params as { conversation_id: string; text: string };
+        return jsonResult(
+          await callApi(cfg(), "POST", `/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, {
+            body: { text },
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_update_inbox_conversations_status",
+      label: "AdaptlyPost: mark conversations",
+      description: `Set the inbox status of 1 to 100 conversations to UNREAD, READ or DONE. Nothing is sent to the platform. Returns { conversations, unreadCount }. ${INBOX_WRITE_NOTE}`,
+      parameters: InboxStatusUpdate,
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/inbox/conversations/status", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_inbox_reviews",
+      label: "AdaptlyPost: list Google reviews",
+      description:
+        "List Google Business Profile reviews of the connected locations, newest first. Returns { reviews, total, hasMore, nextCursor }; each has id, accountId, platform (GOOGLE_BUSINESS), accountName (the location), platformReviewId, reviewer { name, avatarUrl, isAnonymous }, rating (1 to 5), text (empty for a rating-only review), reply { text, updatedAt } or null, createdAt, updatedAt, status (UNREAD, READ or DONE), repliedAt, maxReplyLength and capabilities { canReply }. Filter with ratings and replied. Page with cursor while hasMore is true.",
+      parameters: Type.Object({
+        ...inboxListFields(REVIEW_PLATFORMS),
+        ratings: Type.Optional(
+          Type.Array(Type.Integer({ minimum: 1, maximum: 5 }), { description: "Only reviews with these star ratings." }),
+        ),
+        replied: Type.Optional(
+          Type.Boolean({ description: "true for reviews the business answered, false for the unanswered ones." }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(
+          await callApi(cfg(), "GET", "/inbox/reviews", { query: params as Record<string, unknown>, signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: REPLY_INBOX_REVIEW_TOOL,
+      label: "AdaptlyPost: reply to a Google review",
+      description: `Put the business's public reply on a Google review. Google allows one reply per review, so this replaces any reply already there. It is public at once, so every call pauses for the user's approval of the exact text. Up to 4096 bytes of UTF-8 (maxReplyLength on the review); longer or empty text answers 400 inbox_reply_invalid. Returns the updated review. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({
+        review_id: ReviewId,
+        text: Type.String({ minLength: 1, description: "The reply text, exactly as the user approved it." }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REPLY_INBOX_REVIEW_TOOL, params);
+        const { review_id: reviewId, text } = params as { review_id: string; text: string };
+        return jsonResult(
+          await callApi(cfg(), "PUT", `/inbox/reviews/${encodeURIComponent(reviewId)}/reply`, {
+            body: { text },
+            signal,
+          }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: DELETE_INBOX_REVIEW_REPLY_TOOL,
+      label: "AdaptlyPost: delete a Google review reply",
+      description: `Delete the business's reply to a Google review; the review itself stays. Every call pauses for the user's approval. Returns the updated review with reply null. ${INBOX_WRITE_NOTE}`,
+      parameters: Type.Object({ review_id: ReviewId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, DELETE_INBOX_REVIEW_REPLY_TOOL, params);
+        const { review_id: reviewId } = params as { review_id: string };
+        return jsonResult(
+          await callApi(cfg(), "DELETE", `/inbox/reviews/${encodeURIComponent(reviewId)}/reply`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_update_inbox_reviews_status",
+      label: "AdaptlyPost: mark reviews",
+      description: `Set the inbox status of 1 to 100 reviews to UNREAD, READ or DONE. Nothing is sent to Google. Returns { reviews, unreadCount }. ${INBOX_WRITE_NOTE}`,
+      parameters: InboxStatusUpdate,
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/inbox/reviews/status", { body: params, signal }));
       },
     });
   },
