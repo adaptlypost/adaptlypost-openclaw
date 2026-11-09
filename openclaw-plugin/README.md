@@ -89,7 +89,7 @@ or URL, each account by name, the timing, each platform's visibility and title,
 and every caption including per-platform overrides. It also lists each first
 comment, each thread reply with its image count, Instagram collaborators, tagged accounts, audio and story sharing,
 Facebook story sharing and text backgrounds, the Google Business Profile topic, event, offer
-and button, per-platform thumbnails and image shapes, and X links that stay
+and button, each platform's own media, per-platform thumbnails and image shapes, and X links that stay
 clickable. OpenClaw caps a prompt at
 512 characters. When a call doesn't fit, the plugin refuses it instead of
 cutting anything, and tells the agent to save a draft or split the call. The
@@ -258,6 +258,15 @@ monthly or yearly. It needs mode SCHEDULE, since the first post sets the time of
 it cannot include TikTok. X and LinkedIn reject repeated identical text, so put
 spintax such as `{Hi|Hello}` in the caption. Editing a series or skipping one
 date happens in the AdaptlyPost app.
+
+`platformMedia` gives one platform its own media when the post media does not
+fit it, such as a shorter cut of a video too long for TikTok, or 4 images for X
+from a bigger carousel. Each entry names the platform and its `mediaUrls` from
+`adaptlypost_upload_media`, with optional `mediaAltTexts` in the same order.
+The entry must match `contentType`, and is checked against that platform's
+limits only. Other platforms keep the post `mediaUrls`. An overridden platform
+skips the post thumbnail, so give it its own through `platformThumbnails`. The
+approval prompt lists each platform's own files.
 
 Media has to reach storage before the post references it. `adaptlypost_upload_media`
 does the presign and the PUT together, so a post that names an unstored file

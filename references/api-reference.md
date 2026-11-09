@@ -280,6 +280,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `thumbnailUrl` (string): Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless `platformThumbnails` overrides it
 - `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on every platform that takes one: `YOUTUBE`, `FACEBOOK`, `INSTAGRAM`, `LINKEDIN`, `PINTEREST`, `TELEGRAM` and `TIKTOK`. A `thumbnailUrl` sent with it wins everywhere except `TIKTOK`, and `platformThumbnails` overrides both
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
+- `platformMedia` (array): Different media for one platform. See [Platform media](#platform-media)
 - `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
 - `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
 - `threadReplies` (array): Replies that turn the post into a thread on X, Threads, Bluesky or Mastodon. See [Thread replies](#thread-replies)
@@ -372,6 +373,18 @@ Any other platform returns `400`, as does a platform the post does not go to, a 
 - `TIKTOK`: frame only
 
 A platform without an entry uses the post-level `thumbnailUrl` and `thumbnailTimestampMs`, which work on every platform above. Other platforms, posts that are not videos, Facebook and Instagram stories, a second entry for one platform and an entry the platform cannot use return `400`. On `PATCH`, sending the array replaces every override and leaving it out keeps the stored ones.
+
+#### Platform media
+
+`platformMedia` gives one platform its own media, for when the post media does not fit it: a video too long for TikTok, a carousel with more images than X takes. One entry per platform: `{ "platform": "TIKTOK", "mediaUrls": ["https://cdn.adaptlypost.com/social-media-posts/uuid/short-cut.mp4"], "mediaAltTexts": [] }`.
+
+- `platform` (string, required): A platform the post goes to
+- `mediaUrls` (string[], required): Not empty. Public URLs from [POST /upload-urls](#post-upload-urls), like the post's own `mediaUrls`; no data URIs
+- `mediaAltTexts` (string[]): Alt text per item, in the same order as this entry's `mediaUrls` (max 1000 characters each; use `""` to skip one)
+
+The entry must match the post `contentType`: one video for `VIDEO`, one image for `IMAGE`, one document for `DOCUMENT`, two or more items for `CAROUSEL`. `TEXT` posts take none. Each entry is checked against its own platform's limits only, and the post `mediaUrls` is no longer checked against that platform. A platform without an entry uses the post `mediaUrls`. An overridden platform does not use the post-level `thumbnailUrl` or `thumbnailTimestampMs`; give it its own through [`platformThumbnails`](#platform-thumbnails).
+
+A platform the post does not go to, an empty `mediaUrls`, a data URI, a second entry for one platform and media of another type return `400`. On `PATCH`, sending the array replaces every override, `[]` clears them all, and leaving it out keeps the stored ones. It takes effect without `platforms`.
 
 #### Image shape per platform
 
@@ -508,6 +521,7 @@ Platform entry fields set by the newer request fields (absent when not used):
 - First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`
 - Thread: `threadReplies` (the reply texts in order, empty when the platform has no thread), `threadReplyMediaUrls` (string[][], parallel to `threadReplies`, `[]` for a reply without images), `threadStatus` (`PENDING` until every reply is posted, `PUBLISHED` once they are, `FAILED` when one could not be), `threadReplyIds` (the platform's ids of the replies published so far, in order, AT URIs on Bluesky; fewer ids than replies means the rest did not go out), `threadError`, `threadPublishedAt`
 - Thumbnail override: `thumbnailUrl`, `thumbnailTimestampMs`
+- Media override: `mediaOverrideUrls`, `mediaOverrideAltTexts` (empty when the platform uses the post media). The entry's `mediaUrls` is what that platform publishes
 - Image shape: `mediaAspectRatio`, `mediaAspectRatioFit`
 - Instagram: `instagramCollaborators`, `instagramUserTags` (each `{ username, x, y }`), `instagramAiGenerated` (the post carries the AI info label), `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
 - Facebook: `facebookTextFormatPresetId`, `facebookImageLayout` (`GRID` or `CAROUSEL`), `facebookCarouselCards` (each with `link`, `title`, `description`), `facebookAiGenerated` (the post carries the AI info label; see `facebookConfigs[].aiGenerated`)
@@ -581,7 +595,7 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 - Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`, `pageIds`
 - Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
 
-`firstComments`, `threadReplies`, `platformThumbnails` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`, `linkedinConfigs`, `twitterConfigs` or `accountIds`.
+`firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`, `linkedinConfigs`, `twitterConfigs` or `accountIds`.
 
 See [platform-configs.md](platform-configs.md) for config schemas.
 
@@ -595,7 +609,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
-- `firstComments`, `threadReplies`, `platformThumbnails`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
+- `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
 - Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
@@ -757,7 +771,7 @@ Moving a `SCHEDULED` post's `scheduledAt` more than a minute into the past retur
 
 A post with a YouTube entry whose `youtubeScheduledVideoId` is set and not yet published returns `409`, because the video already waits on YouTube for its publish time. Delete the post and schedule it again to change it.
 
-Accepts the same body as `POST /social-posts`, minus `saveAsDraft`, `recurrence` and `accountIds`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments`, `threadReplies` and `platformThumbnails` you omit keep their values. Sending `firstComments`, `threadReplies` or `platformThumbnails` replaces every stored entry, and a `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched.
+Accepts the same body as `POST /social-posts`, minus `saveAsDraft`, `recurrence` and `accountIds`. Updates are partial: `text`, `contentType`, `scheduledAt`, `timezone`, `thumbnailUrl`, `thumbnailTimestampMs`, `firstComments`, `threadReplies`, `platformThumbnails` and `platformMedia` you omit keep their values. Sending `firstComments`, `threadReplies`, `platformThumbnails` or `platformMedia` replaces every stored entry, `[]` clears them, and a `threadReplies` entry with `"texts": []` removes that platform's thread. `platforms` is the exception: sending it rebuilds the post's targets from that request alone, so resend every `*ConnectionIds` array and platform config you want to keep. `mediaUrls` only take effect together with `platforms`, and on a `SCHEDULED` post they are verified in storage the same way as on create. Omitting `platforms` leaves accounts, configs, and media untouched. `platformMedia` takes effect with or without `platforms`.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
 

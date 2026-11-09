@@ -497,6 +497,14 @@ function settingLines(params: Record<string, unknown>): string[] {
   return lines;
 }
 
+function platformMediaLines(params: Record<string, unknown>): string[] {
+  return configEntries(params, "platformMedia").map((entry) => {
+    const media = stringArray(entry.mediaUrls).map(fileName);
+    const altTextCount = stringArray(entry.mediaAltTexts).filter((altText) => altText.trim()).length;
+    return `${platformLabel(entry.platform)} gets its own media: ${media.join(", ")}${altTextCount ? `, alt text on ${altTextCount} of ${media.length}` : ""}`;
+  });
+}
+
 function firstCommentLines(params: Record<string, unknown>): string[] {
   return configEntries(params, "firstComments").map(
     (entry) => `${platformLabel(entry.platform)} first comment: "${String(entry.text ?? "")}"`,
@@ -626,6 +634,7 @@ async function describePost(cfg: PluginConfig, params: Record<string, unknown>):
     ...settingLines(params),
     ...(media.length ? [`Media: ${media.join(", ")}`] : []),
     ...(altTextCount ? [`Alt text on ${altTextCount} of ${media.length} images`] : []),
+    ...platformMediaLines(params),
     ...(nonEmpty(params.thumbnailUrl) ? [`Thumbnail: ${fileName(params.thumbnailUrl)}`] : []),
     ...textLines(params),
     ...firstCommentLines(params),
