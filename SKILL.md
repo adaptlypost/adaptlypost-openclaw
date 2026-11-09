@@ -742,6 +742,20 @@ Returns `{ "boards": [{ "id", "name", "description", "privacy", "pinCount" }] }`
 
 Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed. Leave both out only when the user is happy with that board.
 
+### LinkedIn company pages
+
+To mention (tag) a LinkedIn company page in a post, look the page up first:
+
+```bash
+curl -s -G -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  --data-urlencode "query=https://www.linkedin.com/company/acme/" \
+  "https://post.adaptlypost.com/post/api/v1/linkedin-organizations/lookup"
+```
+
+`query` (1 to 300 characters) is the company page URL, its vanity name (`acme`, the part after `linkedin.com/company/`) or `@acme`. Returns `{ "organization": { "id", "name", "vanityName", "urn", "mention" } }`, for example `"mention": "@[Acme](urn:li:organization:2414183)"`; `vanityName` is `null` when the page has none. Paste `mention` into the LinkedIn text as it is. When the post also goes to other platforms, put it in `platformTexts` for `LINKEDIN`, since other platforms show the syntax as raw text.
+
+LinkedIn matches the exact vanity name only, so this is not a search: `acm` or a company name with spaces finds nothing. Ask the user for the page URL when you don't know the vanity name. Needs `accounts.read`, and posts nothing. Errors carry a `code` in the body: `400` `linkedin_organization_query_invalid` when the query is neither a page URL nor a vanity name, `404` `linkedin_organization_not_found` when no page has that vanity name, and `400` `linkedin_organization_lookup_unavailable` when no LinkedIn account of the workspace could run the lookup. For the last one, tell the user to connect or reconnect a LinkedIn account in AdaptlyPost, ideally a company page they administer.
+
 ### Per-platform extras
 
 All optional, and each takes at most one entry per platform. A platform the field does not support returns `400`.
@@ -761,7 +775,7 @@ All optional, and each takes at most one entry per platform. A platform the fiel
 - `youtubeConfigs[].scheduleOnYouTube: true`: AdaptlyPost uploads the video as soon as the post is scheduled, as a private video with YouTube's own publish time set to `scheduledAt`, and YouTube publishes it at that time. Use it when the user wants to set up Test & Compare (thumbnail or title A/B tests) in YouTube Studio before the video goes public. `privacyStatus` must be `public` or left out, or the API returns `400` with the issue code `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`. A post with `recurrence` returns `400` with `YOUTUBE_SCHEDULE_NOT_RECURRING`. With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual. The platform entry reads back `youtubeScheduleOnYouTube` and, once the upload is done, `youtubeScheduledVideoId`. From then until the video is published, `PATCH`, `/unschedule` and `/publish` on the post return `409`. To change the post, delete it and schedule it again.
 - `facebookConfigs[].textFormatPresetId`: a colored background for a `TEXT` post with no media and up to 130 characters, for example `106018623298955` (solid purple). If Facebook refuses it, the post goes out as plain text.
 - `facebookConfigs[].imageLayout: "CAROUSEL"` with `carouselCards`: swipeable cards instead of a photo grid, each opening its own link. Send one card per image, in the same order as `mediaUrls`: `{ "link": "https://example.com/a", "title": "Shoes", "description": "New in" }` (`link` required, `title` max 100, `description` max 200). Needs 2 to 5 images, no videos and `postType: FEED`, or the API returns `400`. Facebook shows the card image and title only for links to a website the Page owns; any other link makes the post fail with a message saying so. Leave `imageLayout` out for the usual photo grid.
-- LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it.
+- LinkedIn company mentions: write `@[Page Name](urn:li:organization:<id>)` in `text` or a LinkedIn `platformTexts` entry, with the page name exactly as LinkedIn shows it. Get the ready-made mention from `GET /linkedin-organizations/lookup` with the page URL or vanity name (see [LinkedIn company pages](#linkedin-company-pages)).
 - `linkedinConfigs[].reshareOf`: reshare a LinkedIn post from the account, with the post text as the commentary. Takes a `urn:li:share:` or `urn:li:ugcPost:` URN (such as a `platformPostId` from `/results`) or a `https://www.linkedin.com/feed/update/<urn>` link; `urn:li:activity:` links are refused. The post's media is not attached on that account.
 - `twitterConfigs[].quoteOf`: quote one of the X account's own posts, with the post text as the commentary: a `https://x.com/<handle>/status/<id>` link or the numeric id. X only lets an account quote its own posts or posts that mention it, so a link naming another handle is refused before posting. The text is required and the post's media is not attached. `POST /social-posts` and `PATCH` only, like `linkedinConfigs`.
 - `accountIds`: account `id`s from `/social-accounts` that AdaptlyPost sorts into `platforms` and the per-platform connection lists for you, instead of or alongside them. `POST /social-posts` only.
@@ -837,6 +851,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - For a Pinterest post, pass the board the user named as `boardName`. Otherwise list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Never send both. Leave both out only when the user is happy with the default "AdaptlyPost" board.
+- To mention a LinkedIn company page, call `GET /linkedin-organizations/lookup` with the page URL or vanity name and paste the `mention` it returns. Ask for the page URL when you don't know the vanity name, since a partial name finds nothing.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.
 - A recurring post repeats the same text, which X and LinkedIn reject as a duplicate. Put spintax such as `{Hi|Hello}` in the text so each post differs.

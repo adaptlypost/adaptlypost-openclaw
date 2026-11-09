@@ -31,6 +31,7 @@
       "adaptlypost_search_instagram_audio",
       "adaptlypost_list_pinterest_boards",
       "adaptlypost_list_wordpress_categories",
+      "adaptlypost_resolve_linkedin_organization",
       "adaptlypost_upload_media",
       "adaptlypost_create_post",
       "adaptlypost_validate_post",
@@ -121,6 +122,16 @@
       ]
     },
     "adaptlypost_list_wordpress_categories": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_resolve_linkedin_organization": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",

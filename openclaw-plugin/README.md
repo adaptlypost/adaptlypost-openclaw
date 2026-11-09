@@ -131,6 +131,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
 | `adaptlypost_list_wordpress_categories` | List the categories of a WordPress site, to pass their ids as `wordpressConfigs[].categoryIds`. |
+| `adaptlypost_resolve_linkedin_organization` | Look up a LinkedIn company page by its URL or vanity name and return the `mention` to paste into a LinkedIn post. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_validate_post` | Check a post without creating it. Takes the same parameters as `adaptlypost_create_post` and returns each account's status, the issues to fix and what only the platform can decide. Needs no approval. |
@@ -173,7 +174,7 @@ Inbox tools:
 | `adaptlypost_delete_inbox_review_reply` | Delete the business's reply to a review. Needs approval. |
 | `adaptlypost_update_inbox_reviews_status` | Mark reviews unread, read or done. |
 
-Forty-two tools, fewer than the MCP server exposes. Post editing, deletion,
+Forty-three tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
@@ -222,6 +223,14 @@ Bluesky and Mastodon. A failed comment never fails the post.
 `twitterConfigs[].quoteOf` quotes one of the X account's own posts, each with
 the post text as the commentary. The approval prompt names the post being
 reshared or quoted.
+
+To mention a LinkedIn company page, call
+`adaptlypost_resolve_linkedin_organization` with the page URL
+(`https://www.linkedin.com/company/acme/`) or its vanity name and paste the
+`mention` it returns into the LinkedIn text as is. LinkedIn matches the exact
+vanity name only, so ask the user for the page URL when you don't know it. When
+the post also goes to other platforms, put the mention in `platformTexts` for
+`LINKEDIN`, since other platforms show the syntax as raw text.
 
 `threadReplies` turns the post into a thread on X, Threads, Bluesky or
 Mastodon: the post opens it, and each text goes out from the same account as a

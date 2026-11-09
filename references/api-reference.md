@@ -27,7 +27,7 @@ Which permission each endpoint needs:
 | `DELETE /social-posts/:id` on a post that is not a `DRAFT`; `DELETE /recurring-posts/:id` | `posts.delete` | admin, editor |
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
-| `GET /social-accounts` | `accounts.read` | all |
+| `GET /social-accounts`, `GET /linkedin-organizations/lookup` | `accounts.read` | all |
 | `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `GET /social-accounts/:id/wordpress-categories`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
@@ -182,6 +182,38 @@ List the boards a Pinterest account can pin to, secret boards included. `:id` is
 
 Returns `404` when the account is not found or is not a Pinterest account in this workspace, and `400` when Pinterest refuses the request, usually because the account must be reconnected.
 
+### GET /linkedin-organizations/lookup
+
+Look up a LinkedIn company page so a LinkedIn post can mention it. Needs `accounts.read`. Read-only.
+
+**Query parameters:**
+
+- `query` (string, required, 1 to 300 characters): the company page URL (`https://www.linkedin.com/company/acme/`), its vanity name (`acme`, the part after `linkedin.com/company/`) or `@acme`
+
+**Response:**
+
+```json
+{
+  "organization": {
+    "id": "2414183",
+    "name": "Devtestco",
+    "vanityName": "devtestco",
+    "urn": "urn:li:organization:2414183",
+    "mention": "@[Devtestco](urn:li:organization:2414183)"
+  }
+}
+```
+
+`vanityName` is `null` when the page has none. Paste `mention` into the LinkedIn text as it is. When the post also goes to other platforms, put it in `platformTexts` for `LINKEDIN`, since other platforms show the syntax as raw text.
+
+LinkedIn matches the exact vanity name only, so this is not a search: `acm` or a company name with spaces finds nothing. Ask the user for the page URL when the vanity name is unknown.
+
+Errors carry a `code` in the body:
+
+- `400` `linkedin_organization_query_invalid`: the query is neither a page URL nor a vanity name
+- `404` `linkedin_organization_not_found`: no page has that vanity name
+- `400` `linkedin_organization_lookup_unavailable`: no LinkedIn account of the workspace could run the lookup. Tell the user to connect or reconnect a LinkedIn account, ideally a company page they administer
+
 ### GET /social-accounts/:id/wordpress-categories
 
 List the categories of a WordPress site, sorted by name. `:id` is the WordPress account `id` from `/social-accounts`. Needs `posts.draft`.
@@ -241,7 +273,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 **Optional fields:**
 
 - `accountIds` (string[]): Account `id`s (or Facebook `pageId`s) from `/social-accounts`. AdaptlyPost adds each account's platform to `platforms` and its id to the matching connection id list, so you can send these instead of `platforms` and the per-platform lists, or alongside them. An id that is not connected to the workspace returns `400`. `POST /social-posts` only
-- `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it
+- `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it; `GET /linkedin-organizations/lookup` returns the ready-made mention
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`. The LinkedIn mention syntax works here too
 - `mediaUrls` (string[]): Public URLs of uploaded media files
 - `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
