@@ -677,7 +677,7 @@ const PostParameters = Type.Object({
     ],
     {
       description:
-        "Must match the media supplied. CAROUSEL needs more than one mediaUrl: up to 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
+        "Must match the media supplied. CAROUSEL needs more than one mediaUrl: up to 4 on Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on X, LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok. DOCUMENT is LinkedIn only: exactly one PDF, PPT, PPTX, DOC or DOCX file (max 100 MB, 300 pages), titled with linkedinConfigs.",
     },
   ),
   text: Type.Optional(Type.String({ description: "Default caption shared across platforms." })),

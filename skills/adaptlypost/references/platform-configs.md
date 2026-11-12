@@ -421,8 +421,7 @@ These platforms use only connection ID arrays, plus `twitterConfigs` for an X qu
 
 - Uses `twitterConnectionIds` array; `twitterConfigs` only for `quoteOf`
 - Character limit: 280
-- Up to 4 images per post. For a bigger carousel, give X its own 2 to 4 images with top-level `platformMedia`; the other platforms keep the post `mediaUrls`
-- No video support via this API
+- Up to 20 images per post, or one video. Images and a video can't share a post
 - Links in X text are broken by default (`example.com` becomes `example. com`) because X charges over 10 times more for a post with a link. Top-level `twitterKeepLinks: true` keeps them clickable, on AppSumo lifetime deals only, at 20 credits instead of 2
 - Top-level `threadReplies` with `platform: TWITTER` turns the post into a thread of up to 25 replies, 280 characters each (more on X Premium), with up to 4 images per reply. Thread replies are not retried on X, and a lifetime-deal account pays for each reply like any X post
 

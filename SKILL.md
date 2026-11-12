@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, read their analytics, and read and answer the comments, mentions, direct messages and Google reviews they receive. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, ask about views, likes, comments, followers or top posts on them, or read, reply to, hide, like or delete comments, mentions, messages and reviews in the AdaptlyPost inbox. Every reply, message, review reply, hide, delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.32.0
+version: 1.32.1
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -239,7 +239,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 ```
 
 For video: use `mimeType: "video/mp4"`, `contentType: "VIDEO"`.
-For carousel: upload 2 or more files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`. The most a platform takes is 4 on X, Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos; the others take images only, and YouTube has no carousel.
+For carousel: upload 2 or more files, include all public URLs in `mediaUrls`, use `contentType: "CAROUSEL"`. The most a platform takes is 4 on Bluesky and Mastodon, 5 on Pinterest, 10 on Instagram, Facebook, Threads and Telegram, 20 on X, LinkedIn and WordPress, 30 on Tumblr and 35 on TikTok (JPEG or WebP only). Instagram and Threads mix images and videos; the others take images only, and YouTube has no carousel.
 For a LinkedIn document (PDF, slide deck or Word file shown as a swipeable document): upload the one file (keep its extension in `fileName`), use `contentType: "DOCUMENT"`, put that single URL in `mediaUrls`, target only `LINKEDIN`, and optionally name it with `"linkedinConfigs": [{ "connectionId": "LINKEDIN_ID", "documentTitle": "Q3 results" }]` (max 100 chars, defaults to the file name). DOCUMENT on another platform, a second file, or a document on a non-DOCUMENT post returns 400.
 For alt text: `mediaAltTexts` holds one entry per image, in the same order as `mediaUrls` (max 1000 characters; `""` skips an image). X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads get each image's alt; Pinterest uses the first; TikTok, YouTube, Google Business Profile, Telegram and videos ignore it.
 For a different video thumbnail per platform: `platformThumbnails`, see [Per-platform extras](#per-platform-extras). For different media on one platform, such as a shorter cut of a video too long for TikTok or 4 images for X from a bigger carousel: `platformMedia`, same section. To reframe images to one shape on Instagram or TikTok: `platformAspectRatios`, same section.
@@ -808,7 +808,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 | Facebook | ≤30MB, JPG/PNG | 1 per post | Up to 10 images |
 | YouTube | — | Shorts ≤3min, H.264 | — |
 | LinkedIn | Supported | ≤10min | Up to 20 images; or one PDF/PPT/PPTX/DOC/DOCX document ≤100MB, 300 pages |
-| X (Twitter) | Supported | — | Up to 4 images |
+| X (Twitter) | Supported | 1 per post | Up to 20 images |
 | Pinterest | 2:3 ratio ideal | Supported | 2-5 images |
 | Bluesky | Supported | Not supported | Up to 4 images |
 | Mastodon | Up to 4 (server can allow more) | 1 per post | Up to 4 |
