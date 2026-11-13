@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, read their analytics, and read and answer the comments, mentions, direct messages and Google reviews they receive. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, ask about views, likes, comments, followers or top posts on them, or read, reply to, hide, like or delete comments, mentions, messages and reviews in the AdaptlyPost inbox. Every reply, message, review reply, hide, delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.32.1
+version: 1.33.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -573,7 +573,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Threads** | — | No config object, uses `threadsConnectionIds`; top-level `threadReplies` turns the post into a thread |
 | **Telegram** | — | No config object, uses `telegramConnectionIds` only |
 | **Tumblr** | `tumblrConfigs` | `tags` (up to 30, each at most 140 characters, no commas), `title`, `sourceUrl` |
-| **WordPress** | `wordpressConfigs` | `title`, `excerpt`, `categoryIds` (from `GET /social-accounts/:id/wordpress-categories`), `tags` |
+| **WordPress** | `wordpressConfigs` | `title`, `excerpt`, `categoryIds` (from `GET /social-accounts/:id/wordpress-categories`), `tags`, `status` (`PUBLISH`, `DRAFT` or `PENDING`) |
 
 **Example with TikTok config:**
 
@@ -669,7 +669,7 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/social-posts \
 
 ### WordPress
 
-Put the site's account `id` in `wordpressConnectionIds`. The text becomes the body of a published blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable. A WordPress post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video up to 500 MB, and alt text. The first image is the featured image; the other images or the video follow the text. `wordpressConfigs` sets the `title` (max 300; without one, the first line of the text cut to 100 characters), an `excerpt` (max 1000, the summary WordPress shows in post lists and feeds), `categoryIds` and `tags` (up to 50 each). A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise. A site that answers 401 or 403 is marked for reconnect. WordPress has no first comments, thumbnails, image shapes or analytics.
+Put the site's account `id` in `wordpressConnectionIds`. The text becomes the body of a blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable. A WordPress post is `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`, with up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video up to 500 MB, and alt text. The first image is the featured image; the other images or the video follow the text. `wordpressConfigs` sets the `title` (max 300; without one, the first line of the text cut to 100 characters), an `excerpt` (max 1000, the summary WordPress shows in post lists and feeds), `categoryIds` and `tags` (up to 50 each), and the `status` the post gets on the site. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise. `status` `PUBLISH` (the default) publishes the post live at its time, `DRAFT` leaves a WordPress draft the user finishes and publishes or schedules in WordPress, and `PENDING` submits it for review ("Pending Review"). AdaptlyPost marks the platform published once WordPress holds the post in that status, and for `DRAFT` and `PENDING` the post's `postUrl` opens it in the WordPress editor. A WordPress `DRAFT` is not an AdaptlyPost draft: the post still has to be scheduled or published to reach the site. A site that answers 401 or 403 is marked for reconnect. WordPress has no first comments, thumbnails, image shapes or analytics.
 
 When the user names categories, list the site's categories and match the names to ids:
 
@@ -848,7 +848,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - `timezone` is stored for display and does not shift `scheduledAt`, so pass `scheduledAt` as an absolute instant (`Z` or an offset).
 - Each platform needs its connection IDs: `twitterConnectionIds`, `instagramConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `linkedinConnectionIds`, `tiktokConnectionIds`, `threadsConnectionIds`, `pinterestConnectionIds`, `youtubeConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`. Facebook uses `pageIds`, filled with the Facebook account's `id` from `/social-accounts`.
 - Telegram takes text up to 4096 characters, up to 10 images or one video up to 50 MB; a caption over 1024 characters is sent as its own message after the media.
-- For a WordPress post, set the title with `wordpressConfigs` unless the first line of the text works as one. When the user names categories, list them with `GET /social-accounts/:id/wordpress-categories` and pass the ids as `categoryIds`.
+- For a WordPress post, set the title with `wordpressConfigs` unless the first line of the text works as one. When the user names categories, list them with `GET /social-accounts/:id/wordpress-categories` and pass the ids as `categoryIds`. When the user wants to finish the post in WordPress, set `status: "DRAFT"`, or `"PENDING"` to submit it for review.
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - For a Pinterest post, pass the board the user named as `boardName`. Otherwise list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Never send both. Leave both out only when the user is happy with the default "AdaptlyPost" board.

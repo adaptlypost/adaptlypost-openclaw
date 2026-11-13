@@ -388,7 +388,8 @@ One entry per location in `googleBusinessConnectionIds`. A location without an e
       "title": "The autumn collection",
       "excerpt": "Every piece of the new season in one place.",
       "categoryIds": [12],
-      "tags": ["autumn", "new"]
+      "tags": ["autumn", "new"],
+      "status": "DRAFT"
     }
   ]
 }
@@ -401,14 +402,16 @@ One entry per location in `googleBusinessConnectionIds`. A location without an e
 | `excerpt` | string | no | Summary WordPress shows in post lists and feeds (max 1,000 chars) |
 | `categoryIds` | integer[] | no | Up to 50 category ids from `GET /social-accounts/:id/wordpress-categories`. Omitted, WordPress files the post under the site's default category |
 | `tags` | string[] | no | Up to 50 tag names (max 100 chars each). A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise |
+| `status` | string | no | `PUBLISH` (default) publishes the post live at its time. `DRAFT` leaves a WordPress draft the user finishes and publishes or schedules in WordPress. `PENDING` submits it for review ("Pending Review"). For `DRAFT` and `PENDING` the post's `postUrl` opens it in the WordPress editor |
 
 **Media notes:**
 
-- The text becomes the body of a published blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable
+- The text becomes the body of a blog post, up to 100,000 characters: blank lines start new paragraphs and bare links become clickable
 - `contentType` `TEXT`, `IMAGE`, `VIDEO` or `CAROUSEL`
 - Up to 20 JPEG, PNG, WebP or GIF images (20 MB each), or one MP4 or MOV video up to 500 MB
 - The first image is the featured image; the other images or the video follow the text
 - Alt text is sent to WordPress
+- AdaptlyPost marks the platform published once WordPress holds the post in the asked `status`; a WordPress `DRAFT` is not an AdaptlyPost draft, so the post still has to be scheduled or published
 - A site that answers 401 or 403 is marked for reconnect
 - No first comments, threads, thumbnails, image shapes or analytics
 - The site (WordPress 5.6 or later, over HTTPS) is connected in the AdaptlyPost app on the Connectors page

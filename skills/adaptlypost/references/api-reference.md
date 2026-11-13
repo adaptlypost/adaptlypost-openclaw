@@ -301,7 +301,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `googleBusinessConnectionIds` (string[]): Google Business Profile location `id` values from `/social-accounts`. A location without a `googleBusinessConfigs` entry gets a `STANDARD` update
 - `telegramConnectionIds` (string[]): Telegram channel and group `id` values from `/social-accounts`. Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB). A caption over 1024 characters goes out as its own message after the media
 - `tumblrConnectionIds` (string[]): Tumblr blog `id` values from `/social-accounts`. Text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video (500 MB, up to 10 minutes)
-- `wordpressConnectionIds` (string[]): WordPress site `id` values from `/social-accounts`. The text becomes the body of a published blog post (up to 100,000 characters; blank lines start new paragraphs and bare links become clickable). Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text. A site without a `wordpressConfigs` entry uses the first line of the text as the title
+- `wordpressConnectionIds` (string[]): WordPress site `id` values from `/social-accounts`. The text becomes the body of a blog post (up to 100,000 characters; blank lines start new paragraphs and bare links become clickable). Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text. A site without a `wordpressConfigs` entry uses the first line of the text as the title
 - `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost"
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
@@ -311,7 +311,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `twitterConfigs` (array): X settings per account: `quoteOf` quotes one of the account's own X posts
 - `googleBusinessConfigs` (array): Google Business Profile settings per location: topic (update, event or offer), button, event and offer details
 - `tumblrConfigs` (array): Tumblr settings per blog: tags, a title and a source link
-- `wordpressConfigs` (array): WordPress settings per site: title, excerpt, category ids and tags
+- `wordpressConfigs` (array): WordPress settings per site: title, excerpt, category ids, tags and `status` (`PUBLISH`, the default, publishes the post live; `DRAFT` leaves a WordPress draft; `PENDING` submits it for review). See [platform-configs.md](platform-configs.md#wordpress--wordpressconfigs)
 
 See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
@@ -531,7 +531,7 @@ Platform entry fields set by the newer request fields (absent when not used):
 - TikTok: `tiktokDraftFallback` (TikTok's daily cap was hit, so the content went to the creator's TikTok inbox as a draft instead of being published)
 - Google Business Profile: `googleBusinessTopicType`, `googleBusinessCallToActionType`, `googleBusinessCallToActionUrl`, `googleBusinessEventTitle`, `googleBusinessEventStart`, `googleBusinessEventEnd`, `googleBusinessOfferCouponCode`, `googleBusinessOfferRedeemUrl`, `googleBusinessOfferTerms`
 - Tumblr: `tumblrTags`, `tumblrTitle`, `tumblrSourceUrl`
-- WordPress: `wordpressTitle`, `wordpressExcerpt`, `wordpressCategoryIds`, `wordpressTags`
+- WordPress: `wordpressTitle`, `wordpressExcerpt`, `wordpressCategoryIds`, `wordpressTags`, `wordpressStatus` (`PUBLISH`, `DRAFT` or `PENDING`)
 
 A story shared next to a feed post or reel (`shareToStory`) is its own platform entry with `instagramPostType` or `facebookPostType` set to `STORY`.
 

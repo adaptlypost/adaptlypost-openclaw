@@ -424,6 +424,11 @@ function tumblrLine(entry: ConfigEntry): string | undefined {
   return parts.length ? `Tumblr: ${parts.join(", ")}` : undefined;
 }
 
+const WORDPRESS_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "left as a draft on the site, not published",
+  PENDING: "submitted for review on the site, not published",
+};
+
 function wordpressLine(entry: ConfigEntry): string | undefined {
   const parts: string[] = [];
   if (nonEmpty(entry.title)) parts.push(`title "${entry.title}"`);
@@ -432,6 +437,8 @@ function wordpressLine(entry: ConfigEntry): string | undefined {
   if (categoryIds.length) parts.push(`category ids ${categoryIds.join(", ")}`);
   const tags = stringArray(entry.tags);
   if (tags.length) parts.push(`tags ${tags.join(", ")}`);
+  const status = typeof entry.status === "string" ? WORDPRESS_STATUS_LABELS[entry.status] : undefined;
+  if (status) parts.push(status);
   return parts.length ? `WordPress: ${parts.join(", ")}` : undefined;
 }
 

@@ -512,6 +512,12 @@ const PlatformConfigFields = {
               "Tag names. A tag the site does not have yet is created when the WordPress user may manage tags, and skipped otherwise.",
           }),
         ),
+        status: Type.Optional(
+          Type.Union([Type.Literal("PUBLISH"), Type.Literal("DRAFT"), Type.Literal("PENDING")], {
+            description:
+              "What the site gets at the post's time. PUBLISH (default) publishes it live. DRAFT leaves a WordPress draft the user finishes and publishes or schedules in WordPress. PENDING submits it for review (Pending Review). Unrelated to mode DRAFT: the post must still be scheduled or published to reach the site. For DRAFT and PENDING the post's postUrl opens it in the WordPress editor.",
+          }),
+        ),
       }),
       { description: "WordPress per-site options. connectionId must match an entry in wordpressConnectionIds." },
     ),
