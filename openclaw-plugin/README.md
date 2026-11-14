@@ -215,9 +215,15 @@ featured image, and `wordpressConfigs` sets the title, excerpt, categories and
 tags. Find category ids with `adaptlypost_list_wordpress_categories`. Both are
 connected in the AdaptlyPost app.
 
-`firstComments` adds a comment from the same account right after the post goes
-out on LinkedIn, YouTube, Facebook and Instagram, or a reply on X, Threads,
-Bluesky and Mastodon. A failed comment never fails the post.
+`firstComments` adds a comment from the same account within about a minute of
+the post going out (about two minutes on YouTube) on LinkedIn, YouTube,
+Facebook and Instagram, or a reply on X, Threads, Bluesky and Mastodon. A
+failed comment never fails the post. An entry's optional `delayMinutes` (0 to
+10080, 7 days) posts the comment within about a minute of that many minutes
+after the platform publishes; omitted or 0 means no delay. Once
+the post is published the delay cannot be changed, and deleting the post
+cancels a comment that has not gone out yet. The approval prompt shows the
+delay when one is set.
 
 `linkedinConfigs[].reshareOf` reshares a LinkedIn post from the account, and
 `twitterConfigs[].quoteOf` quotes one of the X account's own posts, each with

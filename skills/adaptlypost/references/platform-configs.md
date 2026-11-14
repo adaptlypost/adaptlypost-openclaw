@@ -461,7 +461,7 @@ These platforms use only connection ID arrays, plus `twitterConfigs` for an X qu
 - Uses `linkedinConnectionIds` array
 - Character limit: 3,000 (under 1,300 performs better)
 - Carousel of up to 20 images, or video up to 10 min, or one document (see `linkedinConfigs` above)
-- Put links in a first comment (`firstComments`), not the post body, because LinkedIn deprioritizes external links
+- Put links in a first comment (`firstComments`), not the post body, because LinkedIn deprioritizes external links. `delayMinutes` on the entry posts it later, up to 10080 minutes (7 days) after the post
 - Mention a company page with `@[Page Name](urn:li:organization:<id>)`, the page name exactly as LinkedIn shows it. `GET /linkedin-organizations/lookup` with the page URL or vanity name returns the ready-made mention
 - 3-5 hashtags max
 

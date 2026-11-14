@@ -282,7 +282,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
 - `platformMedia` (array): Different media for one platform. See [Platform media](#platform-media)
 - `platformAspectRatios` (array): Reframe images to one shape per platform. See [Image shape per platform](#image-shape-per-platform)
-- `firstComments` (array): A comment posted right after the post goes out. See [First comments](#first-comments)
+- `firstComments` (array): A comment posted shortly after the post goes out. See [First comments](#first-comments)
 - `threadReplies` (array): Replies that turn the post into a thread on X, Threads, Bluesky or Mastodon. See [Thread replies](#thread-replies)
 - `twitterKeepLinks` (boolean): Keep links in the X text clickable. See [Links on X](#links-on-x)
 - `scheduledAt` (string): ISO 8601 UTC datetime. A future value schedules the post; omitted or in the past publishes immediately. With `saveAsDraft: true` it is the draft's planned date: the post stays a `DRAFT`, and `POST /social-posts/:id/publish` without `scheduledAt` schedules it for that date
@@ -317,11 +317,13 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 
 #### First comments
 
-`firstComments` posts a comment from the same account right after the post goes out, one entry per platform:
+`firstComments` posts a comment from the same account shortly after the post goes out, one entry per platform:
 
 ```json
-{ "firstComments": [{ "platform": "LINKEDIN", "text": "Read the full report at example.com/report" }] }
+{ "firstComments": [{ "platform": "LINKEDIN", "text": "Read the full report at example.com/report", "delayMinutes": 60 }] }
 ```
+
+Each entry takes `platform`, `text` and an optional `delayMinutes`: an integer from 0 to 10080 (7 days), how many minutes after the platform publishes to post the comment. Omitted or 0 means no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet. An out-of-range value returns `400`.
 
 | Platform | Posted as | Max characters |
 | --- | --- | --- |
@@ -334,7 +336,7 @@ See [platform-configs.md](platform-configs.md) for detailed config schemas.
 | `FACEBOOK` | comment | 8000 |
 | `INSTAGRAM` | comment | 2200 |
 
-Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a platform that also has `threadReplies`, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out about 10 seconds after the platform publishes (60 on YouTube) and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
+Any other platform returns `400`, as does a platform the post does not go to, an empty or too long text, a second entry for one platform, a platform that also has `threadReplies`, a private or made for kids YouTube video, and Facebook or Instagram stories. The comment goes out within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of `delayMinutes` after it, and is retried up to 3 times. On X it is not retried, and on a lifetime-deal account it costs credits like any X post. A failed comment never fails the post: read `firstCommentStatus` and `firstCommentError` on the platform entry. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect from Connectors; until then its comment fails and `firstCommentError` says to reconnect. On `PATCH`, sending the array replaces every first comment and leaving it out keeps the stored ones.
 
 #### Thread replies
 
@@ -518,7 +520,7 @@ The post carries its `mediaUrls` at the top level as well as on each platform en
 
 Platform entry fields set by the newer request fields (absent when not used):
 
-- First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`
+- First comment: `firstComment`, `firstCommentStatus` (`PENDING`, `PUBLISHED` or `FAILED`), `firstCommentId`, `firstCommentError`, `firstCommentPublishedAt`, `firstCommentDelayMinutes` (integer, absent when the comment posts right away), `firstCommentDueAt` (ISO date-time, set once the platform publishes; a comment with `firstCommentStatus` `PENDING` goes out within about a minute of that time)
 - Thread: `threadReplies` (the reply texts in order, empty when the platform has no thread), `threadReplyMediaUrls` (string[][], parallel to `threadReplies`, `[]` for a reply without images), `threadStatus` (`PENDING` until every reply is posted, `PUBLISHED` once they are, `FAILED` when one could not be), `threadReplyIds` (the platform's ids of the replies published so far, in order, AT URIs on Bluesky; fewer ids than replies means the rest did not go out), `threadError`, `threadPublishedAt`
 - Thumbnail override: `thumbnailUrl`, `thumbnailTimestampMs`
 - Media override: `mediaOverrideUrls`, `mediaOverrideAltTexts` (empty when the platform uses the post media). The entry's `mediaUrls` is what that platform publishes

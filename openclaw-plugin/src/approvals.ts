@@ -512,9 +512,16 @@ function platformMediaLines(params: Record<string, unknown>): string[] {
   });
 }
 
+function firstCommentDelay(minutes: unknown): string {
+  return typeof minutes === "number" && minutes > 0
+    ? `, ${counted(minutes, "minute", "minutes")} after the post`
+    : "";
+}
+
 function firstCommentLines(params: Record<string, unknown>): string[] {
   return configEntries(params, "firstComments").map(
-    (entry) => `${platformLabel(entry.platform)} first comment: "${String(entry.text ?? "")}"`,
+    (entry) =>
+      `${platformLabel(entry.platform)} first comment: "${String(entry.text ?? "")}"${firstCommentDelay(entry.delayMinutes)}`,
   );
 }
 
@@ -736,7 +743,9 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     ...(nonEmpty(entry.pinterestLink) ? [`  Link: ${entry.pinterestLink}`] : []),
     ...(media.length ? [`  Media: ${media.join(", ")}`] : []),
     `  Text: ${nonEmpty(text) ? `"${text}"` : "(none)"}`,
-    ...(nonEmpty(entry.firstComment) ? [`  First comment: "${entry.firstComment}"`] : []),
+    ...(nonEmpty(entry.firstComment)
+      ? [`  First comment: "${entry.firstComment}"${firstCommentDelay(entry.firstCommentDelayMinutes)}`]
+      : []),
     ...threadLines("  Thread", entry.threadReplies, entry.threadReplyMediaUrls, "    "),
   ];
 }

@@ -588,6 +588,14 @@ const FirstComment = Type.Object({
     description:
       "Comment text. Limits: LINKEDIN 1250, TWITTER 280, THREADS 500, BLUESKY 300, MASTODON 500, YOUTUBE 10000, FACEBOOK 8000, INSTAGRAM 2200 characters.",
   }),
+  delayMinutes: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      maximum: 10080,
+      description:
+        "How many minutes after the platform publishes to post the comment, up to 10080 (7 days). Omit it or send 0 for no delay. The comment goes out within about a minute of that time; without a delay, within about a minute of the post (about two minutes on YouTube). Once the post is published the delay cannot be changed; deleting the post cancels a comment that has not gone out yet.",
+    }),
+  ),
 });
 
 const ThreadReplies = Type.Object({
@@ -695,7 +703,7 @@ const PostParameters = Type.Object({
   firstComments: Type.Optional(
     Type.Array(FirstComment, {
       description:
-        "A comment posted from the same account about 10 seconds after the platform publishes (60 on YouTube), one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms and must not also have threadReplies. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus and firstCommentError per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
+        "A comment posted from the same account within about a minute of the platform publishing (about two minutes on YouTube), or within about a minute of delayMinutes after it when the entry sets one, one entry per platform: a comment on LinkedIn, YouTube, Facebook and Instagram, a reply on X, Threads, Bluesky and Mastodon. The platform must be in platforms and must not also have threadReplies. Not for private or made for kids YouTube videos or Facebook and Instagram stories. A failed comment never fails the post; adaptlypost_list_posts shows firstCommentStatus, firstCommentError, firstCommentDelayMinutes and firstCommentDueAt (set once the platform publishes; a PENDING comment goes out within about a minute of that time) per platform. A Facebook Page or Instagram account connected before Facebook and Instagram got first comments needs one reconnect, or its comment fails. On X it is not retried and costs credits like any X post on a lifetime-deal account.",
     }),
   ),
   threadReplies: Type.Optional(
