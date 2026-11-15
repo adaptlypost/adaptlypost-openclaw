@@ -2,7 +2,7 @@
 name: adaptlypost
 description: Schedule, publish and review social posts through the AdaptlyPost API on Instagram, X (Twitter), Bluesky, Mastodon, TikTok, Threads, LinkedIn, Facebook, Pinterest, YouTube, Google Business Profile, Telegram, Tumblr and WordPress accounts connected to AdaptlyPost, read their analytics, and read and answer the comments, mentions, direct messages and Google reviews they receive. Use only when the user has an AdaptlyPost account and asks to draft, schedule, publish, edit or delete a post on those accounts, upload media for such a post, pause, resume or delete a recurring post, list, re-check or disconnect the connected accounts, check a post's status, create a link for someone else to connect an account, register a webhook at a URL they give, ask about views, likes, comments, followers or top posts on them, or read, reply to, hide, like or delete comments, mentions, messages and reviews in the AdaptlyPost inbox. Every reply, message, review reply, hide, delete, disconnect, connect link and webhook needs the user's explicit yes first. Do not use for writing captions without posting, general social media advice, or accounts that are not connected to AdaptlyPost.
 homepage: https://adaptlypost.com
-version: 1.33.0
+version: 1.34.0
 required_environment_variables:
   - name: ADAPTLYPOST_API_KEY
     prompt: AdaptlyPost API key
@@ -424,9 +424,9 @@ curl -X POST https://post.adaptlypost.com/post/api/v1/connect-links \
   }'
 ```
 
-Returns `{ "url", "token", "expiresAt", "name", "visibility", "allowedPlatforms", "maxAccounts" }`. Give the `url` to the user who asked for it (Safety rule 8). Anyone holding it can attach an account to this group, so revoke it once used with `DELETE /connect-links/TOKEN`.
+Returns `{ "url", "token", "expiresAt", "name", "visibility", "allowedPlatforms", "maxAccounts", "returnUrl", "startUrls" }`. Give the `url` to the user who asked for it (Safety rule 8). Anyone holding it can attach an account to this group, so revoke it once used with `DELETE /connect-links/TOKEN`.
 
-`PRIVATE` shows the client only the accounts they connected through the link. A link sent with no body is the opposite: every platform, every account in the group visible to the client, no cap and 7 days. Never create one without a body. `expiresAt` takes 1 hour to 365 days, and `neverExpires: true` keeps the link until it is revoked; only send it when the user asks for a link that never expires. The fields are in `references/api-reference.md`.
+`PRIVATE` shows the client only the accounts they connected through the link. A link sent with no body is the opposite: every platform, every account in the group visible to the client, no cap and 7 days. Never create one without a body. `expiresAt` takes 1 hour to 365 days, and `neverExpires: true` keeps the link until it is revoked; only send it when the user asks for a link that never expires. A developer who shows their own connect buttons sends `returnUrl` and uses `startUrls`; the client then comes back to that URL with `status`, `platform` and one `accountId` per account connected. The fields are in `references/api-reference.md`.
 
 Never ask a user for a social platform password. This endpoint exists so you never have to.
 
