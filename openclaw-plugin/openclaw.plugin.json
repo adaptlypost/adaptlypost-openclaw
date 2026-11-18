@@ -2,7 +2,7 @@
   "id": "adaptlypost",
   "name": "AdaptlyPost",
   "description": "Schedule and publish social posts to LinkedIn, X, Instagram, Facebook, TikTok, YouTube, Pinterest, Threads, Bluesky, Mastodon, Google Business Profile, Telegram, Tumblr and WordPress from OpenClaw, read how they performed, and read and answer comments, mentions, direct messages and Google reviews.",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -67,7 +67,16 @@
       "adaptlypost_list_inbox_reviews",
       "adaptlypost_reply_inbox_review",
       "adaptlypost_delete_inbox_review_reply",
-      "adaptlypost_update_inbox_reviews_status"
+      "adaptlypost_update_inbox_reviews_status",
+      "adaptlypost_list_workspaces",
+      "adaptlypost_create_workspace",
+      "adaptlypost_delete_workspace",
+      "adaptlypost_list_members",
+      "adaptlypost_remove_member",
+      "adaptlypost_remove_organization_member",
+      "adaptlypost_list_invitations",
+      "adaptlypost_send_invitation",
+      "adaptlypost_revoke_invitation"
     ]
   },
   "toolMetadata": {
@@ -492,6 +501,96 @@
       ]
     },
     "adaptlypost_update_inbox_reviews_status": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_workspaces": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_create_workspace": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_delete_workspace": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_members": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_remove_member": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_remove_organization_member": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_list_invitations": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_send_invitation": {
+      "configSignals": [
+        {
+          "rootPath": "plugins.entries.adaptlypost.config",
+          "required": [
+            "apiToken"
+          ]
+        }
+      ]
+    },
+    "adaptlypost_revoke_invitation": {
       "configSignals": [
         {
           "rootPath": "plugins.entries.adaptlypost.config",

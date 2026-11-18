@@ -28,6 +28,11 @@ export const REPLY_INBOX_MENTION_TOOL = "adaptlypost_reply_inbox_mention";
 export const SEND_INBOX_MESSAGE_TOOL = "adaptlypost_send_inbox_message";
 export const REPLY_INBOX_REVIEW_TOOL = "adaptlypost_reply_inbox_review";
 export const DELETE_INBOX_REVIEW_REPLY_TOOL = "adaptlypost_delete_inbox_review_reply";
+export const DELETE_WORKSPACE_TOOL = "adaptlypost_delete_workspace";
+export const REMOVE_MEMBER_TOOL = "adaptlypost_remove_member";
+export const REMOVE_ORGANIZATION_MEMBER_TOOL = "adaptlypost_remove_organization_member";
+export const SEND_INVITATION_TOOL = "adaptlypost_send_invitation";
+export const REVOKE_INVITATION_TOOL = "adaptlypost_revoke_invitation";
 export const GATED_TOOLS = [
   UPLOAD_TOOL,
   CREATE_POST_TOOL,
@@ -45,6 +50,11 @@ export const GATED_TOOLS = [
   SEND_INBOX_MESSAGE_TOOL,
   REPLY_INBOX_REVIEW_TOOL,
   DELETE_INBOX_REVIEW_REPLY_TOOL,
+  DELETE_WORKSPACE_TOOL,
+  REMOVE_MEMBER_TOOL,
+  REMOVE_ORGANIZATION_MEMBER_TOOL,
+  SEND_INVITATION_TOOL,
+  REVOKE_INVITATION_TOOL,
 ] as const;
 
 export const APPROVAL_TIMEOUT_MS = 300_000;
@@ -1003,6 +1013,294 @@ async function describeAccountRemoval(cfg: PluginConfig, params: Record<string, 
   };
 }
 
+type WorkspaceRecord = {
+  id: string;
+  name?: string;
+  organization?: { id?: string; name?: string };
+  isDefault?: boolean;
+  current?: boolean;
+};
+
+type MemberRecord = {
+  userId: string;
+  email?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role?: string;
+  organizationRoles?: string[];
+};
+
+type InvitationRecord = {
+  id: string;
+  email?: string;
+  organizationRole?: string;
+  status?: string;
+  workspaces?: { workspaceId?: string; workspaceName?: string | null; role?: string }[];
+  expiresAt?: string;
+};
+
+type InvitationWorkspaceInput = { workspaceId?: unknown; role?: unknown };
+type CreditAllowanceInput = { mode?: unknown; monthlyAmount?: unknown; balance?: unknown };
+
+const INVITATION_LOOKUP_LIMIT = 100;
+
+const ORGANIZATION_ROLE_LABELS: Record<string, string> = {
+  "org-owner": "organization owner",
+  "org-admin": "organization admin",
+  "org-member": "organization member",
+};
+
+function organizationRoleLabel(role: unknown): string {
+  return ORGANIZATION_ROLE_LABELS[String(role)] ?? String(role);
+}
+
+async function requireTeamPermission(
+  cfg: PluginConfig,
+  permission: string,
+  action: string,
+  instead: string,
+): Promise<void> {
+  const me = await keyCapabilities(cfg, AbortSignal.timeout(LOOKUP_TIMEOUT_MS));
+  if (me && Array.isArray(me.permissions) && !me.permissions.includes(permission)) {
+    throw new Error(
+      `${roleHolder(me)} cannot ${action}: that needs ${permission}, which only the Admin role holds, so AdaptlyPost would refuse with 403 permission_denied. Nothing was changed. Tell the user ${instead}, or give the agent an Admin key.`,
+    );
+  }
+}
+
+async function fetchWorkspaces(cfg: PluginConfig, signal: AbortSignal): Promise<WorkspaceRecord[]> {
+  const { workspaces = [] } = (await callApi(cfg, "GET", "/workspaces", { signal }).catch((error: unknown) => {
+    throw lookupFailed("the workspace", error);
+  })) as { workspaces?: WorkspaceRecord[] };
+  return workspaces;
+}
+
+function workspaceLabel(workspace: WorkspaceRecord | undefined, id: string): string {
+  const name = workspace?.name;
+  return nonEmpty(name) ? `workspace "${name}"` : `workspace ${id}`;
+}
+
+function organizationLabel(workspace: WorkspaceRecord | undefined): string {
+  const name = workspace?.organization?.name;
+  return nonEmpty(name) ? ` "${name}"` : "";
+}
+
+function memberLabel(member: MemberRecord): string {
+  const name = [member.firstName, member.lastName].filter(nonEmpty).join(" ");
+  const email = nonEmpty(member.email) ? member.email : member.userId;
+  return name ? `${name} (${email})` : email;
+}
+
+async function describeWorkspaceDeletion(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const workspaceId = String(params.workspace_id ?? "");
+  await requireTeamPermission(
+    cfg,
+    "workspace.manage",
+    "delete workspaces",
+    "an organization owner or admin has to delete it in the AdaptlyPost app",
+  );
+  const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const workspace = (await fetchWorkspaces(cfg, signal)).find((candidate) => candidate.id === workspaceId);
+  const name = workspaceLabel(workspace, workspaceId);
+  if (workspace?.isDefault) {
+    throw new Error(
+      `The ${name} is the organization's default workspace, which cannot be deleted, so AdaptlyPost would refuse with 400. Nothing was deleted.`,
+    );
+  }
+
+  const details: string[] = [];
+  if (workspace) {
+    const [accounts, posts] = await Promise.all([
+      callApi(cfg, "GET", "/social-accounts", { signal }) as Promise<{ accounts?: unknown[] }>,
+      callApi(cfg, "GET", "/social-posts", { query: { limit: 1 }, signal }) as Promise<{ total?: number }>,
+    ]).catch((error: unknown) => {
+      throw lookupFailed(name, error);
+    });
+    const connected = accounts.accounts?.length ?? 0;
+    if (connected) {
+      throw new Error(
+        `The ${name} still has ${counted(connected, "connected social account", "connected social accounts")}, so AdaptlyPost would refuse to delete it with 400. Nothing was deleted. The accounts have to be removed first; ask the user whether they want that.`,
+      );
+    }
+    if (typeof posts.total === "number") details.push(`It holds ${counted(posts.total, "post", "posts")}.`);
+    if (workspace.current) details.push("It is this key's own workspace, so the key stops working once it is deleted.");
+  } else {
+    details.push(
+      `This key can only read its own workspace, so the prompt names this one by id. Check with the user that ${workspaceId} is the workspace they mean.`,
+    );
+  }
+
+  const title = "Delete a workspace";
+  const lines = [
+    `Deletes ${name} and everything in it: posts, recurring posts, RSS feeds, inbox items, API keys and connect links. This cannot be undone.`,
+    ...details,
+  ];
+  return {
+    title,
+    description: requireFullPrompt(title, lines, "Let the user delete it in the AdaptlyPost app."),
+    severity: "critical",
+    scope: { kind: "external-post", target: name, visibility: "restricted" },
+  };
+}
+
+async function describeMemberRemoval(
+  cfg: PluginConfig,
+  toolName: string,
+  params: Record<string, unknown>,
+): Promise<ApprovalRequest> {
+  const organizationWide = toolName === REMOVE_ORGANIZATION_MEMBER_TOOL;
+  const userId = String(params.user_id ?? "");
+  await requireTeamPermission(
+    cfg,
+    "members.manage",
+    organizationWide ? "remove people from the organization" : "remove workspace members",
+    "an organization owner or admin has to remove them in the AdaptlyPost app",
+  );
+  const signal = AbortSignal.timeout(LOOKUP_TIMEOUT_MS);
+  const [workspaces, { members = [] }] = await Promise.all([
+    fetchWorkspaces(cfg, signal),
+    callApi(cfg, "GET", "/members", { signal }).catch((error: unknown) => {
+      throw lookupFailed("the workspace members", error);
+    }) as Promise<{ members?: MemberRecord[] }>,
+  ]);
+  const workspace = workspaces.find((candidate) => candidate.current);
+  const member = members.find((candidate) => candidate.userId === userId);
+  if (!member && !organizationWide) {
+    throw new Error(
+      `No member of this workspace has user id ${userId}, so nothing was removed. Call adaptlypost_list_members for current ids.`,
+    );
+  }
+  const organizationRoles = stringArray(member?.organizationRoles);
+  if (member && organizationRoles.includes("org-owner")) {
+    throw new Error(`${memberLabel(member)} is the organization owner, who cannot be removed. Nothing was removed.`);
+  }
+
+  const who = member ? memberLabel(member) : `user ${userId}`;
+  const workspaceName = workspace ? workspaceLabel(workspace, workspace.id) : "this key's workspace";
+  const lines = organizationWide
+    ? [
+        `Removes ${who} from the organization${organizationLabel(workspace)} and from every workspace in it, and revokes all their API keys and connect links. Bringing them back takes a new invitation.`,
+        member
+          ? `They are ${roleLabel(String(member.role))} in ${workspaceName}${organizationRoles.length ? ` and ${organizationRoles.map((role) => `an ${organizationRoleLabel(role)}`).join(", ")}` : ""}.`
+          : `They are not a member of this key's workspace, so the prompt names them by id. Check with the user that ${userId} is the person they mean.`,
+        ...(organizationRoles.includes("org-admin") ? ["Only the organization owner can remove an organization admin."] : []),
+      ]
+    : [
+        `Removes ${who} from ${workspaceName}, where they are ${roleLabel(String(member?.role))}. Their API keys and connect links in this workspace are revoked. They stay in the organization and in their other workspaces.`,
+      ];
+  const title = organizationWide ? "Remove someone from the organization" : "Remove a workspace member";
+  return {
+    title,
+    description: requireFullPrompt(title, lines, "Let the user remove them in the AdaptlyPost app."),
+    severity: "critical",
+    scope: { kind: "external-post", target: who, visibility: "restricted" },
+  };
+}
+
+function creditAllowanceLine(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const allowance = value as CreditAllowanceInput;
+  if (allowance.mode === "MONTHLY") {
+    return `AI credit allowance: ${String(allowance.monthlyAmount)} credits, reset every plan cycle, spent from the plan owner's credits.`;
+  }
+  if (allowance.mode === "FIXED") {
+    return `AI credit allowance: ${String(allowance.balance)} credits, not reset, spent from the plan owner's credits.`;
+  }
+  return `AI credit allowance: ${String(allowance.mode)}.`;
+}
+
+async function describeInvitation(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  if (!nonEmpty(params.email)) throw new Error("email is empty, so there is nobody to invite. Nothing was sent.");
+  const email = params.email;
+  const entries = Array.isArray(params.workspaces) ? (params.workspaces as InvitationWorkspaceInput[]) : [];
+  if (!entries.length) {
+    throw new Error("workspaces is empty: an invitation needs at least one workspace and role. Nothing was sent.");
+  }
+  await requireTeamPermission(
+    cfg,
+    "members.manage",
+    "invite people",
+    "an organization owner or admin has to invite them in the AdaptlyPost app",
+  );
+  const workspaces = await fetchWorkspaces(cfg, AbortSignal.timeout(LOOKUP_TIMEOUT_MS));
+  const organizationRole = nonEmpty(params.organizationRole) ? params.organizationRole : "org-member";
+  const grants = entries.map((entry) => {
+    const workspace = workspaces.find((candidate) => candidate.id === entry.workspaceId);
+    return `  ${workspaceLabel(workspace, String(entry.workspaceId))}: ${roleLabel(String(entry.role))}`;
+  });
+
+  const title = "Invite someone to the organization";
+  const lines = [
+    `Emails ${email} an invitation to the organization${organizationLabel(workspaces.find((candidate) => candidate.current))} that lasts 7 days. Once they accept, they join as ${organizationRoleLabel(organizationRole)} with these workspace roles:`,
+    ...grants,
+    ...(organizationRole === "org-admin"
+      ? ["An organization admin reaches every workspace and can manage workspaces, members and invitations."]
+      : []),
+    ...[creditAllowanceLine(params.creditAllowance)].filter(nonEmpty),
+  ];
+  const elevated = organizationRole === "org-admin" || entries.some((entry) => entry.role === "admin");
+  return {
+    title,
+    description: requireFullPrompt(
+      title,
+      lines,
+      "Invite to fewer workspaces per call, or let the user send the invitation from the AdaptlyPost app.",
+    ),
+    severity: elevated ? "critical" : "warning",
+    scope: { kind: "external-post", target: email, visibility: "restricted" },
+  };
+}
+
+async function describeInvitationRevoke(cfg: PluginConfig, params: Record<string, unknown>): Promise<ApprovalRequest> {
+  const invitationId = String(params.invitation_id ?? "");
+  await requireTeamPermission(
+    cfg,
+    "members.manage",
+    "revoke invitations",
+    "an organization owner or admin has to revoke it in the AdaptlyPost app",
+  );
+  const page = (await callApi(cfg, "GET", "/invitations", {
+    query: { limit: INVITATION_LOOKUP_LIMIT },
+    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    throw lookupFailed("the invitations", error);
+  })) as { invitations?: InvitationRecord[]; hasMore?: boolean };
+  const invitation = page.invitations?.find((candidate) => candidate.id === invitationId);
+  if (!invitation && !page.hasMore) {
+    throw new Error(
+      `No invitation with id ${invitationId} includes this workspace, so nothing was revoked. Call adaptlypost_list_invitations for current ids.`,
+    );
+  }
+  if (invitation && invitation.status !== "pending") {
+    throw new Error(
+      `The invitation to ${String(invitation.email)} is ${String(invitation.status)}, not pending, so AdaptlyPost would refuse to revoke it with 400. Nothing was changed.`,
+    );
+  }
+
+  const lines = invitation
+    ? [
+        `Revokes the pending invitation to ${String(invitation.email)}, so it can no longer be accepted.`,
+        `It invites them as ${organizationRoleLabel(invitation.organizationRole)} to: ${(invitation.workspaces ?? [])
+          .map(
+            (entry) =>
+              `${nonEmpty(entry.workspaceName) ? `"${entry.workspaceName}"` : `workspace ${String(entry.workspaceId)}`} as ${roleLabel(String(entry.role))}`,
+          )
+          .join(", ")}.`,
+        ...(nonEmpty(invitation.expiresAt) ? [`It would expire ${invitation.expiresAt}.`] : []),
+      ]
+    : [
+        `Revokes invitation ${invitationId}, so it can no longer be accepted.`,
+        `It is not among the ${INVITATION_LOOKUP_LIMIT} newest invitations of this workspace, so the prompt names it by id.`,
+      ];
+  const title = "Revoke an invitation";
+  return {
+    title,
+    description: requireFullPrompt(title, lines, "Let the user revoke it in the AdaptlyPost app."),
+    severity: "warning",
+    scope: { kind: "external-post", target: invitation?.email ?? invitationId, visibility: "restricted" },
+  };
+}
+
 const INBOX_QUOTE_LIMIT = 120;
 const INBOX_MIN_QUOTE = 20;
 const INBOX_LIST_LOOKUP_LIMIT = 100;
@@ -1329,6 +1627,15 @@ export async function describeApproval(
     case REPLY_INBOX_REVIEW_TOOL:
     case DELETE_INBOX_REVIEW_REPLY_TOOL:
       return describeReviewAction(cfg, toolName, params);
+    case DELETE_WORKSPACE_TOOL:
+      return describeWorkspaceDeletion(cfg, params);
+    case REMOVE_MEMBER_TOOL:
+    case REMOVE_ORGANIZATION_MEMBER_TOOL:
+      return describeMemberRemoval(cfg, toolName, params);
+    case SEND_INVITATION_TOOL:
+      return describeInvitation(cfg, params);
+    case REVOKE_INVITATION_TOOL:
+      return describeInvitationRevoke(cfg, params);
     default:
       return undefined;
   }

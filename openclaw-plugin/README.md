@@ -84,6 +84,21 @@ for approval. The prompt names the series, its schedule, its accounts and its
 text. A token whose role cannot change a scheduled series, or cannot unschedule
 a scheduled post (Contributor and Viewer), is refused before the prompt.
 
+Team changes that remove someone or something, or let someone in, stop for
+approval as well: deleting a workspace, removing a member from the workspace,
+removing someone from the organization, sending an invitation and revoking one.
+The prompt says what goes: the workspace's name, its post count and that its
+posts, recurring posts, RSS feeds, inbox items, API keys and connect links go
+with it; the member's name, email and roles, and whether they leave one
+workspace or the whole organization; the invitation's email, roles and
+workspaces. An API key can only read its own workspace, so another workspace,
+or a person who is not in the key's workspace, is named by id and the prompt
+says so. A token without the Admin role, the default workspace, the key's own
+workspace while it still has connected accounts, the organization owner, a
+member id that is not in the workspace and an invitation that is no longer
+pending are refused before the prompt. Listing workspaces, members and
+invitations and creating a workspace need no approval.
+
 The prompt shows everything that will go public: each file with its full path
 or URL, each account by name, the timing, each platform's visibility and title,
 and every caption including per-platform overrides. It also lists each first
@@ -174,7 +189,24 @@ Inbox tools:
 | `adaptlypost_delete_inbox_review_reply` | Delete the business's reply to a review. Needs approval. |
 | `adaptlypost_update_inbox_reviews_status` | Mark reviews unread, read or done. |
 
-Forty-three tools, fewer than the MCP server exposes. Post editing, deletion,
+Team tools:
+
+| tool | what it does |
+|---|---|
+| `adaptlypost_list_workspaces` | The key's workspace with its organization, role and permissions. |
+| `adaptlypost_create_workspace` | Create a workspace in the organization, optionally with a cap on connected accounts. Admin keys only. |
+| `adaptlypost_delete_workspace` | Delete a workspace with everything it holds. Admin keys only. Needs approval. |
+| `adaptlypost_list_members` | List the workspace's members with their workspace and organization roles. |
+| `adaptlypost_remove_member` | Remove a member from the workspace and revoke their keys and connect links there. Admin keys only. Needs approval. |
+| `adaptlypost_remove_organization_member` | Remove someone from the organization and every workspace in it. Admin keys only. Needs approval. |
+| `adaptlypost_list_invitations` | List the invitations that include the workspace. Admin keys only. |
+| `adaptlypost_send_invitation` | Email an invitation to the organization with a role per workspace. Admin keys only. Needs approval. |
+| `adaptlypost_revoke_invitation` | Revoke a pending invitation. Admin keys only. Needs approval. |
+
+Creating or deleting a workspace and removing someone from the organization
+also need the key's creator to be an organization owner or admin.
+
+Fifty-two tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.

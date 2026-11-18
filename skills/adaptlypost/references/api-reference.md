@@ -30,6 +30,11 @@ Which permission each endpoint needs:
 | `GET /social-accounts`, `GET /linkedin-organizations/lookup` | `accounts.read` | all |
 | `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `GET /social-accounts/:id/wordpress-categories`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
+| `GET /workspaces` | none, any valid key | all |
+| `POST /workspaces`, `DELETE /workspaces/:id` | `workspace.manage`, and the key's creator must be an organization owner or admin | admin |
+| `GET /members` | `members.read` | all |
+| `DELETE /members/:userId`, `GET /invitations`, `POST /invitations`, `DELETE /invitations/:id` | `members.manage` | admin |
+| `DELETE /organization/members/:userId` | `members.manage`, and the key's creator must be an organization owner or admin | admin |
 | `GET /webhooks`, `GET /webhooks/:id` | `webhooks.read` | admin, editor, viewer |
 | `POST /webhooks`, `PATCH /webhooks/:id`, `DELETE /webhooks/:id`, `POST /webhooks/:id/test` | `webhooks.manage` | admin, editor |
 | `GET /analytics/*` | `analytics.read` | all |
@@ -888,6 +893,162 @@ Revoke a connect link before it is used or after it expires.
 
 Returns `404` when the token does not exist or belongs to another account group.
 
+## Team
+
+Workspaces, members and invitations. Every call acts in the key's own workspace. A key whose role lacks the permission, or whose creator is not an organization owner or admin where that is required, gets `403 permission_denied`. A plan without room for another workspace, or without a team seat for an invitation, gets `403 subscription_required` with `limitKey`, `limit` and `currentUsage` (see [Error Responses](#error-responses)). Every change here needs the user's "yes" first, with what it removes or grants shown (Safety rule 12 in SKILL.md).
+
+### GET /workspaces
+
+Lists the workspaces the caller can act in. An API key reaches only its own, so this returns one entry. Open to every valid key.
+
+```json
+{
+  "workspaces": [
+    {
+      "id": "cmws0001",
+      "name": "Acme",
+      "organization": { "id": "org_01", "name": "Acme Agency" },
+      "role": { "key": "admin", "name": "Admin" },
+      "permissions": ["workspace.read", "workspace.manage", "members.read", "members.manage"],
+      "isDefault": true,
+      "current": true,
+      "can": { "draft": true, "schedule": true, "publish": true }
+    }
+  ]
+}
+```
+
+`permissions` is shortened here; it lists every permission the key holds.
+
+### POST /workspaces
+
+Creates a workspace in the caller's organization. Every organization owner and admin becomes its admin; nobody else is added. Needs `workspace.manage`, and the key's creator must be an organization owner or admin when the call is made.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string, 1 to 100 characters, required | Unique within the organization. No `<` or `>` |
+| `description` | string, up to 500 characters | No `<` or `>` |
+| `connectionLimit` | integer, 0 to 10000 | Most social accounts the workspace may connect. Leave it out for no limit |
+
+**Response (201):**
+
+```json
+{
+  "id": "cmws0002",
+  "name": "Acme client",
+  "description": null,
+  "organizationId": "org_01",
+  "isDefault": false,
+  "connectionLimit": 5,
+  "createdAt": "2026-11-18T10:00:00.000Z"
+}
+```
+
+`400` for an invalid body or a name the organization already uses. `403 subscription_required` when the plan has no room under `max_workspaces`.
+
+### DELETE /workspaces/:id
+
+Deletes a workspace of the caller's organization with everything it holds: posts, recurring posts, RSS feeds, inbox items, API keys and connect links. Needs `workspace.manage`, and the key's creator must be an organization owner or admin. Deleting the key's own workspace also ends the key.
+
+**Response:** `{ "success": true }`
+
+`400` for the default workspace, the organization's last workspace, and a workspace that still has connected social accounts. `404` when the workspace is not in this organization.
+
+### GET /members
+
+Lists the members of the key's workspace. Needs `members.read`.
+
+```json
+{
+  "members": [
+    {
+      "userId": "user_01",
+      "email": "jane@acme.com",
+      "firstName": "Jane",
+      "lastName": "Doe",
+      "role": "editor",
+      "organizationRoles": ["org-member"],
+      "joinedAt": "2026-10-02T09:30:00.000Z"
+    }
+  ]
+}
+```
+
+`role` is `admin`, `editor`, `contributor` or `viewer`; `organizationRoles` holds `org-owner`, `org-admin` or `org-member`. `firstName` and `lastName` may be `null`.
+
+### DELETE /members/:userId
+
+Removes a member from the key's workspace and revokes their API keys and connect links there. They stay in the organization and in their other workspaces. Needs `members.manage`.
+
+**Response:** `{ "success": true }`
+
+`400` for the caller's own account and for a member's last workspace; remove them from the organization instead. `404` when they are not a member of this workspace.
+
+### DELETE /organization/members/:userId
+
+Removes someone from the organization and every workspace in it, and revokes all their API keys and connect links. Needs `members.manage`, and the key's creator must be an organization owner or admin. The owner cannot be removed, and only the owner can remove an organization admin.
+
+**Response:** `{ "success": true }`
+
+### GET /invitations
+
+Lists the invitations that include the key's workspace, newest first. Needs `members.manage`. Query: `limit` (1 to 100, default 20) and `offset` (default 0); page while `hasMore` is true.
+
+```json
+{
+  "invitations": [
+    {
+      "id": "inv_01",
+      "email": "sam@acme.com",
+      "organizationId": "org_01",
+      "organizationRole": "org-member",
+      "status": "pending",
+      "workspaces": [{ "workspaceId": "cmws0001", "workspaceName": "Acme", "role": "contributor" }],
+      "expiresAt": "2026-11-25T10:00:00.000Z",
+      "createdAt": "2026-11-18T10:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "hasMore": false
+}
+```
+
+`status` is `pending`, `accepted`, `expired` or `revoked`. `workspaceName` is `null` for a workspace that no longer exists.
+
+### POST /invitations
+
+Emails an invitation to the organization that lasts 7 days. On accepting, the person joins the organization with `organizationRole` and each listed workspace with its role. Needs `members.manage`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `email` | email address, required | Who to invite |
+| `organizationRole` | `org-member` (default) or `org-admin` | Only the organization owner may invite an `org-admin` |
+| `workspaces` | array of `{ "workspaceId", "role" }`, at least one, required | `role` is `admin`, `editor`, `contributor` or `viewer` |
+| `creditAllowance` | `{ "mode": "MONTHLY", "monthlyAmount": 1 to 100000 }` or `{ "mode": "FIXED", "balance": 0 to 100000 }` | How many of the plan owner's AI credits the person may spend. `MONTHLY` resets every plan cycle, `FIXED` moves only when spent or changed. Only an organization owner or admin may set it |
+
+A key whose creator is not an organization admin may only invite `org-member`, only to workspaces where that creator holds `members.manage`, and only with a role no higher than their own there.
+
+**Request:**
+
+```json
+{
+  "email": "sam@acme.com",
+  "workspaces": [{ "workspaceId": "cmws0001", "role": "contributor" }]
+}
+```
+
+**Response (201):** the invitation, in the shape of a `GET /invitations` entry.
+
+`400` for an invalid body, an unknown workspace, someone already invited, or someone already a member. `403 subscription_required` when the plan has no team seat left.
+
+### DELETE /invitations/:id
+
+Revokes a pending invitation that includes the key's workspace. Needs `members.manage`. Only the owner may revoke an invitation for an organization admin.
+
+**Response:** the invitation with `status: "revoked"`.
+
+`400` when the invitation is no longer pending. `404` when no such invitation includes this workspace.
+
 ## Recurring posts
 
 A recurring post is a series created by passing `recurrence` to `POST /social-posts`. Only the next occurrence of an `ACTIVE` series exists, as a `SCHEDULED` post created about 24 hours ahead with `recurringPostId` and `occurrenceAt` set. Deleting that one post skips that date and the series continues. Occurrences missed while the series is paused are skipped, never published late.
@@ -1509,7 +1670,7 @@ The full OpenAPI 3 spec, and the one endpoint that needs no authentication, so M
 
 - `400` — Bad request (missing fields, invalid data, validation errors)
 - `401` — Invalid, expired, revoked or missing API token. `code: token_issuer_lost_access` means the member who created the key lost access to the workspace, so the key was revoked; a new key from a current member is the only fix
-- `403` — The key's role lacks the permission (`code: permission_denied`), or the workspace plan is not active (`code: subscription_required`). On the inbox, `code: inbox_reconnect_required` means the account must be reconnected in AdaptlyPost
+- `403` — The key's role lacks the permission (`code: permission_denied`), or the workspace plan is not active or has no room for what was asked (`code: subscription_required`). On the inbox, `code: inbox_reconnect_required` means the account must be reconnected in AdaptlyPost
 - `404` — Resource not found or access denied (`code: inbox_item_not_found` on the inbox)
 - `429` — Rate limit exceeded; see `Retry-After`. On the inbox, `code: inbox_rate_limited` means the platform, not AdaptlyPost, rate limited the call
 - `503` — `code: inbox_platform_error`: the platform failed; retry later
@@ -1559,6 +1720,23 @@ The inbox codes and what to do about each are in [Inbox refusals](#refusals).
 ```
 
 `requiredPermission` is the permission the operation needs (see [Roles and permissions](#roles-and-permissions)), `role` is the role actually in force, which is the issuer's role when the member who created the key has since been demoted below the key's role; `keyRole` is the role recorded on the key, `issuerRole` the creator's current role, and `tokenType` is `api_token` or `oauth`. `message` says what the role cannot do and what to do instead, in the request's language. Stop on this error: a retry or another key of the same role gets the same answer.
+
+**Plan limit reached (403):**
+
+```json
+{
+  "statusCode": 403,
+  "error": "Forbidden",
+  "code": "subscription_required",
+  "errorCode": "LIMIT_EXCEEDED",
+  "message": "Workspace limit reached for your plan",
+  "limitKey": "max_workspaces",
+  "limit": 3,
+  "currentUsage": 3
+}
+```
+
+`POST /workspaces` answers this way when the plan has no room for another workspace, and `POST /invitations` when it has no team seat left. Tell the user to upgrade; a retry gets the same answer.
 
 **Key revoked because its creator left (401):**
 

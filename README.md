@@ -4,7 +4,7 @@ Schedule and manage social media posts across 14 platforms: Instagram, X (Twitte
 
 The same skill file sits in two places, because OpenClaw and Hermes Agent look for it in different folders. OpenClaw reads `SKILL.md` at the repo root. Hermes reads `skills/adaptlypost/SKILL.md`.
 
-For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typed tools. It asks for approval in code before every upload, scheduled post, live post, retry, and inbox reply, message, hide or delete, so prefer it over the curl skill when you run OpenClaw.
+For OpenClaw there is also a [native plugin](openclaw-plugin/README.md) with typed tools. It asks for approval in code before every upload, scheduled post, live post, retry, inbox reply, message, hide or delete, workspace deletion, member removal and invitation, so prefer it over the curl skill when you run OpenClaw.
 
 ## Prerequisites
 

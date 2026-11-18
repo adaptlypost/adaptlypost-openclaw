@@ -16,17 +16,22 @@ import {
   DELETE_INBOX_COMMENT_TOOL,
   DELETE_INBOX_REVIEW_REPLY_TOOL,
   DELETE_RECURRING_TOOL,
+  DELETE_WORKSPACE_TOOL,
   describeApproval,
   GATED_TOOLS,
   HIDE_INBOX_COMMENT_TOOL,
   PAUSE_RECURRING_TOOL,
   REMOVE_ACCOUNT_TOOL,
+  REMOVE_MEMBER_TOOL,
+  REMOVE_ORGANIZATION_MEMBER_TOOL,
   REPLY_INBOX_COMMENT_TOOL,
   REPLY_INBOX_MENTION_TOOL,
   REPLY_INBOX_REVIEW_TOOL,
   RESUME_RECURRING_TOOL,
   RETRY_TOOL,
+  REVOKE_INVITATION_TOOL,
   SEND_INBOX_MESSAGE_TOOL,
+  SEND_INVITATION_TOOL,
   UNHIDE_INBOX_COMMENT_TOOL,
   UNSCHEDULE_TOOL,
   UPLOAD_TOOL,
@@ -823,6 +828,19 @@ const CommentId = Type.String({
 const MentionId = Type.String({ description: "Inbox mention id from adaptlypost_list_inbox_mentions." });
 const ConversationId = Type.String({ description: "Conversation id from adaptlypost_list_inbox_conversations." });
 const ReviewId = Type.String({ description: "Review id from adaptlypost_list_inbox_reviews." });
+
+const WorkspaceRole = Type.Union(
+  [Type.Literal("admin"), Type.Literal("editor"), Type.Literal("contributor"), Type.Literal("viewer")],
+  {
+    description:
+      "Workspace role. admin: everything, including accounts, members and invitations. editor: posts, inbox and webhooks. contributor: own drafts only. viewer: read only.",
+  },
+);
+
+const MemberUserId = Type.String({ description: "The member's userId from adaptlypost_list_members." });
+
+const TEAM_NOTE =
+  "Needs an Admin key (workspace.manage for workspaces, members.manage for members and invitations), and creating or deleting a workspace or removing someone from the organization also needs the key's creator to be an organization owner or admin; other keys get 403 permission_denied. Stop on that and tell the user; do not retry.";
 
 const INBOX_WRITE_NOTE =
   "Inbox writes need an Editor or Admin key (inbox.reply) and an active plan; other roles get 403 permission_denied. A 403 inbox_reconnect_required means the account's connection lacks the permission for this channel (some Meta and Threads permissions are still in platform review) or its token expired: tell the user to reconnect the account in AdaptlyPost and do not retry.";
@@ -1635,6 +1653,179 @@ export default definePluginEntry({
       parameters: InboxStatusUpdate,
       async execute(_toolCallId, params, signal) {
         return jsonResult(await callApi(cfg(), "POST", "/inbox/reviews/status", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_workspaces",
+      label: "AdaptlyPost: list workspaces",
+      description:
+        "List the workspaces this key can act in. An API key belongs to one workspace, so this returns that one: { workspaces } with id, name, organization { id, name }, role { key, name }, permissions, isDefault, current and can { draft, schedule, publish }. Use its id as workspaceId in adaptlypost_send_invitation, and its permissions to see what the key may do before a team change: creating or deleting workspaces needs workspace.manage, managing members and invitations needs members.manage, and only the Admin role holds either. Works with any role. Takes no arguments.",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal) {
+        return jsonResult(await callApi(cfg(), "GET", "/workspaces", { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_create_workspace",
+      label: "AdaptlyPost: create a workspace",
+      description: `Create a workspace in the key's organization. Every organization owner and admin becomes its admin; nobody else is added, so invite people with adaptlypost_send_invitation. Returns { id, name, description, organizationId, isDefault, connectionLimit, createdAt }. This key cannot act in the new workspace, so keep its id to invite people to it or delete it later. Fails with 400 when the name is taken in the organization. ${TEAM_NOTE}`,
+      parameters: Type.Object({
+        name: Type.String({
+          minLength: 1,
+          maxLength: 100,
+          description: "Workspace name, unique within the organization. No < or >.",
+        }),
+        description: Type.Optional(Type.String({ maxLength: 500, description: "Up to 500 characters. No < or >." })),
+        connectionLimit: Type.Optional(
+          Type.Integer({
+            minimum: 0,
+            maximum: 10000,
+            description: "Most social accounts the workspace may connect. Leave out for no limit.",
+          }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "POST", "/workspaces", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: DELETE_WORKSPACE_TOOL,
+      label: "AdaptlyPost: delete a workspace",
+      description: `Delete a workspace of the key's organization with everything it holds: posts, recurring posts, RSS feeds, inbox items, API keys and connect links. Irreversible, so every call pauses for the user's approval, and the prompt names the workspace and what goes with it. Before calling, tell the user the same and get their yes. The default workspace, the organization's last workspace and a workspace that still has connected social accounts cannot be deleted (400); the plugin refuses the first and the last before the prompt when it can see them. Deleting the key's own workspace also ends this key. Returns { success }. ${TEAM_NOTE}`,
+      parameters: Type.Object({
+        workspace_id: Type.String({
+          description:
+            "Workspace id: the id adaptlypost_create_workspace returned, or one from adaptlypost_list_workspaces.",
+        }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, DELETE_WORKSPACE_TOOL, params);
+        const { workspace_id: workspaceId } = params as { workspace_id: string };
+        return jsonResult(await callApi(cfg(), "DELETE", `/workspaces/${encodeURIComponent(workspaceId)}`, { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_members",
+      label: "AdaptlyPost: list members",
+      description:
+        "List the members of the key's workspace. Returns { members } with userId, email, firstName, lastName, role (admin, editor, contributor or viewer), organizationRoles (org-owner, org-admin or org-member) and joinedAt. Use userId for adaptlypost_remove_member and adaptlypost_remove_organization_member, and show the user the name and email, not the id. Needs members.read, which every role holds.",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal) {
+        return jsonResult(await callApi(cfg(), "GET", "/members", { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: REMOVE_MEMBER_TOOL,
+      label: "AdaptlyPost: remove a workspace member",
+      description: `Remove a member from the key's workspace and revoke their API keys and connect links there. They stay in the organization and in their other workspaces. Every call pauses for the user's approval, and the prompt names the member, their email and role. Before calling, tell the user who will be removed and get their yes. Fails with 400 for the caller's own account and for a member's last workspace (remove them from the organization instead), and with 404 when they are not a member. Returns { success }. ${TEAM_NOTE}`,
+      parameters: Type.Object({ user_id: MemberUserId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REMOVE_MEMBER_TOOL, params);
+        const { user_id: userId } = params as { user_id: string };
+        return jsonResult(await callApi(cfg(), "DELETE", `/members/${encodeURIComponent(userId)}`, { signal }));
+      },
+    });
+
+    api.registerTool({
+      name: REMOVE_ORGANIZATION_MEMBER_TOOL,
+      label: "AdaptlyPost: remove someone from the organization",
+      description: `Remove a person from the organization and every workspace in it, and revoke all their API keys and connect links. Bringing them back takes a new invitation. Every call pauses for the user's approval, and the prompt names the person, their email and roles. Before calling, tell the user who will be removed and from what, and get their yes. The owner cannot be removed, and only the owner can remove an organization admin. Returns { success }. ${TEAM_NOTE}`,
+      parameters: Type.Object({ user_id: MemberUserId }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REMOVE_ORGANIZATION_MEMBER_TOOL, params);
+        const { user_id: userId } = params as { user_id: string };
+        return jsonResult(
+          await callApi(cfg(), "DELETE", `/organization/members/${encodeURIComponent(userId)}`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_list_invitations",
+      label: "AdaptlyPost: list invitations",
+      description:
+        "List the invitations that include the key's workspace, newest first. Returns { invitations, total, hasMore }; each has id, email, organizationId, organizationRole, status (pending, accepted, expired or revoked), workspaces [{ workspaceId, workspaceName, role }], expiresAt and createdAt. Only a pending invitation can be revoked. Needs members.manage (Admin keys only). limit is 1 to 100 (default 20); page with offset while hasMore is true.",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: "1 to 100, defaults to 20." })),
+        offset: Type.Optional(
+          Type.Integer({ minimum: 0, description: "Invitations to skip; increase by limit while hasMore is true." }),
+        ),
+      }),
+      async execute(_toolCallId, params, signal) {
+        return jsonResult(await callApi(cfg(), "GET", "/invitations", { query: params as Record<string, unknown>, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: SEND_INVITATION_TOOL,
+      label: "AdaptlyPost: invite someone",
+      description: `Email someone an invitation to the organization that lasts 7 days. On accepting, they join with organizationRole and each listed workspace with its role, and can then do what that role allows. Every call pauses for the user's approval, and the prompt shows the email, the roles, each workspace and any credit allowance. Only invite an address the user gave, with the roles they asked for. Only the owner may invite an org-admin, and only an organization owner or admin may set creditAllowance; a key whose creator is not an organization admin may only invite org-member, to workspaces where that creator manages members, with a role no higher than their own there. Fails with 400 when the person is already invited or already a member, and 403 subscription_required when the plan has no team seat left. Returns the invitation in the shape of adaptlypost_list_invitations entries. ${TEAM_NOTE}`,
+      parameters: Type.Object({
+        email: Type.String({ minLength: 3, maxLength: 320, description: "The email address to invite, exactly as the user gave it." }),
+        organizationRole: Type.Optional(
+          Type.Union([Type.Literal("org-member"), Type.Literal("org-admin")], {
+            description:
+              "org-member (default) or org-admin. An organization admin reaches every workspace and manages members, invitations and workspaces; only the owner may invite one.",
+          }),
+        ),
+        workspaces: Type.Array(
+          Type.Object({
+            workspaceId: Type.String({
+              description: "Workspace id from adaptlypost_list_workspaces or adaptlypost_create_workspace.",
+            }),
+            role: WorkspaceRole,
+          }),
+          { minItems: 1, description: "At least one workspace, each with the role the person gets there." },
+        ),
+        creditAllowance: Type.Optional(
+          Type.Union(
+            [
+              Type.Object({
+                mode: Type.Literal("MONTHLY"),
+                monthlyAmount: Type.Integer({
+                  minimum: 1,
+                  maximum: 100000,
+                  description: "AI credits they may spend each plan cycle; resets every cycle.",
+                }),
+              }),
+              Type.Object({
+                mode: Type.Literal("FIXED"),
+                balance: Type.Integer({
+                  minimum: 0,
+                  maximum: 100000,
+                  description: "AI credits they may spend in total; moves only when spent or changed.",
+                }),
+              }),
+            ],
+            {
+              description:
+                "How many of the plan owner's AI credits they may spend. Leave out unless the user asked; only an organization owner or admin may set it.",
+            },
+          ),
+        ),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, SEND_INVITATION_TOOL, params);
+        return jsonResult(await callApi(cfg(), "POST", "/invitations", { body: params, signal }));
+      },
+    });
+
+    api.registerTool({
+      name: REVOKE_INVITATION_TOOL,
+      label: "AdaptlyPost: revoke an invitation",
+      description: `Revoke a pending invitation that includes the key's workspace, so it can no longer be accepted. Every call pauses for the user's approval, and the prompt shows the email, the roles and the workspaces it would have granted. Before calling, tell the user which invitation goes and get their yes. Only the owner may revoke an invitation for an organization admin. Fails with 400 when the invitation is no longer pending and 404 when no such invitation includes this workspace. Returns the invitation with status revoked. ${TEAM_NOTE}`,
+      parameters: Type.Object({
+        invitation_id: Type.String({ description: "Invitation id from adaptlypost_list_invitations." }),
+      }),
+      async execute(toolCallId, params, signal) {
+        approvals.consume(toolCallId, REVOKE_INVITATION_TOOL, params);
+        const { invitation_id: invitationId } = params as { invitation_id: string };
+        return jsonResult(await callApi(cfg(), "DELETE", `/invitations/${encodeURIComponent(invitationId)}`, { signal }));
       },
     });
   },

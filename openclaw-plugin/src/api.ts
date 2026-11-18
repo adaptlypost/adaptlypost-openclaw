@@ -105,6 +105,9 @@ type ErrorBody = {
   keyRole?: unknown;
   issuerRole?: unknown;
   tokenType?: unknown;
+  limitKey?: unknown;
+  limit?: unknown;
+  currentUsage?: unknown;
 };
 
 function optionalString(value: unknown): string | undefined {
@@ -126,6 +129,14 @@ type PostIssue = {
 function issueLine(issue: PostIssue): string {
   const where = [optionalString(issue.platform), optionalString(issue.connectionId)].filter(Boolean).join(" ");
   return `${String(issue.severity ?? "ERROR")} ${String(issue.code ?? "")}${where ? ` (${where})` : ""}: ${String(issue.message ?? "")}`;
+}
+
+function planLimitSentence({ limitKey, limit, currentUsage }: ErrorBody): string {
+  const key = optionalString(limitKey);
+  if (!key || typeof limit !== "number") return "";
+  return typeof currentUsage === "number"
+    ? ` Plan limit ${key}: ${currentUsage} of ${limit} used.`
+    : ` Plan limit ${key}: ${limit}.`;
 }
 
 function errorMessage(parsed: unknown): string {
@@ -163,7 +174,7 @@ export class AdaptlyPostApiError extends Error {
       issuerRole: optionalString(body.issuerRole),
       tokenType: optionalString(body.tokenType),
     };
-    super(describeApiError(status, code, errorMessage(parsed), requiredPermission, roles));
+    super(describeApiError(status, code, errorMessage(parsed), requiredPermission, roles, planLimitSentence(body)));
     this.name = "AdaptlyPostApiError";
     this.status = status;
     this.code = code;
@@ -197,6 +208,7 @@ function describeApiError(
   message: string,
   requiredPermission: string | undefined,
   roles: DeniedRoles,
+  planLimit: string,
 ): string {
   switch (code) {
     case "permission_denied":
@@ -215,7 +227,7 @@ function describeApiError(
     case "post_validation_failed":
       return `AdaptlyPost refused the post (400 post_validation_failed): ${message.replace(/\.$/, "")}. Nothing was created. Tell the user what each issue says and fix it before calling again; the same post fails the same way. adaptlypost_validate_post shows every account's status without creating anything.`;
     case "subscription_required":
-      return `AdaptlyPost refused this call (403 subscription_required): ${message} Retrying will not help; the user has to update the workspace subscription.`;
+      return `AdaptlyPost refused this call (403 subscription_required): ${message}${planLimit} Retrying will not help; the user has to update the workspace subscription.`;
     case "inbox_item_not_found":
       return `AdaptlyPost found no such inbox item (404 inbox_item_not_found): ${message} It was deleted on the platform or belongs to another workspace. Stop; list the inbox again for current ids.`;
     case "inbox_action_unsupported":
