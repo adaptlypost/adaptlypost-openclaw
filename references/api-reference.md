@@ -211,12 +211,11 @@ Look up a LinkedIn company page so a LinkedIn post can mention it. Needs `accoun
 
 `vanityName` is `null` when the page has none. Paste `mention` into the LinkedIn text as it is. When the post also goes to other platforms, put it in `platformTexts` for `LINKEDIN`, since other platforms show the syntax as raw text.
 
-LinkedIn matches the exact vanity name only, so this is not a search: `acm` or a company name with spaces finds nothing. Ask the user for the page URL when the vanity name is unknown.
+LinkedIn matches the exact vanity name only, so this is not a search: `acm` or a company name with spaces finds nothing, and the answer is `{ "organization": null }`. Ask the user for the page URL when the vanity name is unknown.
 
 Errors carry a `code` in the body:
 
 - `400` `linkedin_organization_query_invalid`: the query is neither a page URL nor a vanity name
-- `404` `linkedin_organization_not_found`: no page has that vanity name
 - `400` `linkedin_organization_lookup_unavailable`: no LinkedIn account of the workspace could run the lookup. Tell the user to connect or reconnect a LinkedIn account, ideally a company page they administer
 
 ### GET /social-accounts/:id/wordpress-categories
