@@ -609,7 +609,7 @@ Pass these as config arrays in the request body. See [references/platform-config
 | **Instagram** | `instagramConfigs` | `postType` (FEED/REEL/STORY), `trialGraduation` (MANUAL/SS_PERFORMANCE, video reels only), `shareToStory`, `collaborators` (up to 3), `userTags` (up to 20), `aiGenerated` (AI info label), `audio` (Reels) |
 | **Facebook** | `facebookConfigs` | `postType` (FEED/REEL/STORY), `videoTitle`, `shareToStory`, `textFormatPresetId` (colored text background), `imageLayout` and `carouselCards` (link carousel), `aiGenerated` (AI info label, videos only) |
 | **Google Business Profile** | `googleBusinessConfigs` | `topicType` (STANDARD/EVENT/OFFER, required), `callToActionType`, `callToActionUrl`, event title and dates, offer code, redeem URL and terms |
-| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `defaultAudioLanguage` (language of the original audio), `categoryId`, `playlistId`, `scheduleOnYouTube` (upload early as private, YouTube publishes at `scheduledAt`) |
+| **YouTube** | `youtubeConfigs` | `postType` (VIDEO/SHORTS), `videoTitle`, `tags`, `privacyStatus`, `license`, `notifySubscribers`, `allowEmbedding`, `madeForKids`, `aiGenerated` (altered or synthetic content label), `defaultAudioLanguage` (language of the original audio), `categoryId`, `playlistId` (from `GET /social-accounts/:id/youtube-playlists`), `scheduleOnYouTube` (upload early as private, YouTube publishes at `scheduledAt`) |
 | **Pinterest** | `pinterestConfigs` | `boardId` (from `GET /social-accounts/:id/pinterest-boards`) or `boardName` (the board's name on that account), never both; with neither the pin goes to a public "AdaptlyPost" board. `title`, `link` |
 | **LinkedIn** | `linkedinConfigs` | `documentTitle` (DOCUMENT posts only), `reshareOf` (reshare a LinkedIn post with the text as commentary) |
 | **X (Twitter)** | `twitterConfigs` | `quoteOf` (quote one of the account's own posts with the text as commentary); top-level `twitterKeepLinks` keeps links clickable and `threadReplies` turns the post into a thread |
@@ -787,6 +787,21 @@ Returns `{ "boards": [{ "id", "name", "description", "privacy", "pinCount" }] }`
 
 Without `boardId` or `boardName` the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed. Leave both out only when the user is happy with that board.
 
+### YouTube playlists
+
+To add the uploaded video to a playlist, list the playlists of the YouTube channel you post to:
+
+```bash
+curl -s -H "Authorization: Bearer $ADAPTLYPOST_API_KEY" \
+  "https://post.adaptlypost.com/post/api/v1/social-accounts/YOUTUBE_ID/youtube-playlists"
+```
+
+Returns `{ "playlists": [{ "id", "title", "privacyStatus", "itemCount" }] }` with every playlist of the channel, private and unlisted ones included. `privacyStatus` is `public`, `unlisted` or `private`. A playlist belongs to one channel, so list the playlists of each channel you post to. An id that is not a YouTube account in this workspace gets `404`. A `400` means YouTube refused the request, usually because the user must reconnect the account. Then pass the pick in the YouTube config:
+
+```json
+"youtubeConfigs": [{ "connectionId": "YOUTUBE_ID", "videoTitle": "Video title", "playlistId": "PLAYLIST_ID" }]
+```
+
 ### LinkedIn company pages
 
 To mention (tag) a LinkedIn company page in a post, look the page up first:
@@ -897,6 +912,7 @@ Upload 1-20 files per request. Keep the file extension in `fileName`: a post rea
 - Google Business Profile takes `TEXT` or `IMAGE` only (one JPEG or PNG up to 5 MB, text up to 1500 characters).
 - TikTok configs **require** `privacyLevel` — always set it (e.g., `PUBLIC_TO_EVERYONE`).
 - For a Pinterest post, pass the board the user named as `boardName`. Otherwise list the account's boards with `GET /social-accounts/:id/pinterest-boards`, ask the user which board to use, and pass its `id` as `boardId`. Never send both. Leave both out only when the user is happy with the default "AdaptlyPost" board.
+- To add a YouTube video to a playlist, list the channel's playlists with `GET /social-accounts/:id/youtube-playlists`, match the one the user named or ask which one, and pass its `id` as `playlistId` in `youtubeConfigs`.
 - To mention a LinkedIn company page, call `GET /linkedin-organizations/lookup` with the page URL or vanity name and paste the `mention` it returns. Ask for the page URL when you don't know the vanity name, since a partial name finds nothing.
 - For carousels, upload multiple files and include all public URLs in `mediaUrls`.
 - Use `platformTexts` to customize text per platform when cross-posting.

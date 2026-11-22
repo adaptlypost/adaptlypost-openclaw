@@ -145,6 +145,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_remove_account` | Disconnect an account from the workspace, unauthorized ones included. Admin keys only. Needs approval. |
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
+| `adaptlypost_list_youtube_playlists` | List the playlists of a YouTube channel, private and unlisted ones included, to pass an `id` as `youtubeConfigs[].playlistId`. |
 | `adaptlypost_list_wordpress_categories` | List the categories of a WordPress site, to pass their ids as `wordpressConfigs[].categoryIds`. |
 | `adaptlypost_resolve_linkedin_organization` | Look up a LinkedIn company page by its URL or vanity name and return the `mention` to paste into a LinkedIn post. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
@@ -206,7 +207,7 @@ Team tools:
 Creating or deleting a workspace and removing someone from the organization
 also need the key's creator to be an organization owner or admin.
 
-Fifty-two tools, fewer than the MCP server exposes. Post editing, deletion,
+Fifty-three tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
@@ -226,6 +227,10 @@ a board with `adaptlypost_list_pinterest_boards` and pass its `id` as
 account. With neither, the pin goes to a public board named "AdaptlyPost",
 created on the account the first time it is needed, and the approval prompt
 says so.
+
+To add a YouTube video to a playlist, list the channel's playlists with
+`adaptlypost_list_youtube_playlists` and pass the chosen `id` as
+`youtubeConfigs[].playlistId`. A playlist belongs to one channel.
 
 Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500

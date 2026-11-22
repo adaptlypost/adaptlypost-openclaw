@@ -28,7 +28,7 @@ Which permission each endpoint needs:
 | Any write on a post or recurring post another member created | the row above, plus `posts.others` | admin, editor |
 | `POST /upload-urls` | `media.upload` | admin, editor, contributor |
 | `GET /social-accounts`, `GET /linkedin-organizations/lookup` | `accounts.read` | all |
-| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `GET /social-accounts/:id/wordpress-categories`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
+| `GET /social-accounts/:id/instagram-audio`, `GET /social-accounts/:id/pinterest-boards`, `GET /social-accounts/:id/youtube-playlists`, `GET /social-accounts/:id/wordpress-categories`, `POST /social-posts/validate`, `POST /social-posts/bulk/validate` | `posts.draft` | admin, editor, contributor |
 | `POST /social-accounts/:id/check`, `DELETE /social-accounts/:id`, `POST /connect-links`, `DELETE /connect-links/:token` | `accounts.manage` | admin |
 | `GET /workspaces` | none, any valid key | all |
 | `POST /workspaces`, `DELETE /workspaces/:id` | `workspace.manage`, and the key's creator must be an organization owner or admin | admin |
@@ -186,6 +186,29 @@ List the boards a Pinterest account can pin to, secret boards included. `:id` is
 `id` and `name` are always set; `description`, `privacy` and `pinCount` are optional. `privacy` is `PUBLIC`, `PROTECTED` or `SECRET`. A board belongs to one Pinterest account, so list the boards of each Pinterest account you post to. Pass the chosen `id` as `pinterestConfigs[].boardId`, or skip this call and pass the name the user gave as `pinterestConfigs[].boardName` (see [platform-configs.md](platform-configs.md#pinterest--pinterestconfigs)).
 
 Returns `404` when the account is not found or is not a Pinterest account in this workspace, and `400` when Pinterest refuses the request, usually because the account must be reconnected.
+
+### GET /social-accounts/:id/youtube-playlists
+
+List the playlists of a YouTube channel, private and unlisted ones included. `:id` is the YouTube account `id` from `/social-accounts`.
+
+**Response:**
+
+```json
+{
+  "playlists": [
+    {
+      "id": "PLxxxxxxxx",
+      "title": "Tutorials",
+      "privacyStatus": "public",
+      "itemCount": 12
+    }
+  ]
+}
+```
+
+`id` and `title` are always set; `privacyStatus` and `itemCount` are optional. `privacyStatus` is `public`, `unlisted` or `private`. A playlist belongs to one channel, so list the playlists of each channel you post to. Pass the chosen `id` as `youtubeConfigs[].playlistId` to add the uploaded video to that playlist (see [platform-configs.md](platform-configs.md#youtube--youtubeconfigs)).
+
+Returns `404` when the account is not found or is not a YouTube account in this workspace, and `400` when YouTube refuses the request, usually because the account must be reconnected.
 
 ### GET /linkedin-organizations/lookup
 
