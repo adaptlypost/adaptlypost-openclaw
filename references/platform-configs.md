@@ -1,6 +1,6 @@
 # Platform-Specific Configs Reference
 
-Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs`, `tumblrConfigs` and `wordpressConfigs` included), except `linkedinConfigs` and `twitterConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take. Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
+Platform configs are passed as arrays in both `POST /social-posts` and `POST /social-posts/bulk` request bodies (`googleBusinessConfigs`, `tumblrConfigs` and `wordpressConfigs` included), except `linkedinConfigs`, which only `POST /social-posts` and `PATCH /social-posts/:id` take. Each config object is tied to a specific connection via `connectionId` (or `pageId` for Facebook — set it to the same value you put in the top-level `pageIds` array, i.e. the Facebook account's `id` from `/social-accounts`).
 
 For bulk scheduling, configs can be set at two levels:
 - **Batch-level** (top-level request body) — applied to all posts as the default

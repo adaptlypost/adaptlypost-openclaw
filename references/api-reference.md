@@ -625,9 +625,9 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 **Optional fields (batch-level):**
 
 - Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`, `pageIds`
-- Platform configs (applied to all posts as default): `pinterestConfigs`, `threadsConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
+- Platform configs (applied to all posts as default): `pinterestConfigs`, `threadsConfigs`, `twitterConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
 
-`firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`, `linkedinConfigs`, `twitterConfigs` or `accountIds`.
+`firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`, `linkedinConfigs` or `accountIds`.
 
 See [platform-configs.md](platform-configs.md) for config schemas.
 
@@ -642,7 +642,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
-- Platform config overrides (per-post): `pinterestConfigs`, `threadsConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
+- Platform config overrides (per-post): `pinterestConfigs`, `threadsConfigs`, `twitterConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
 
