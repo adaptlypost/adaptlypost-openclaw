@@ -267,6 +267,12 @@ delay when one is set.
 the post text as the commentary. The approval prompt names the post being
 reshared or quoted.
 
+`twitterConfigs[].aiGenerated` sets `made_with_ai` on the X post so X labels
+it, `threadsConfigs[].aiGenerated` adds Threads' "AI info" label (thread
+replies do not carry it), and `pinterestConfigs[].aiGenerated` adds Pinterest's
+"AI modified" label. Each `threadsConfigs` entry's `connectionId` must match one
+in `threadsConnectionIds`. The approval prompt shows each label.
+
 To mention a LinkedIn company page, call
 `adaptlypost_resolve_linkedin_organization` with the page URL
 (`https://www.linkedin.com/company/acme/`) or its vanity name and paste the

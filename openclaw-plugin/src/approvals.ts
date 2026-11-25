@@ -464,7 +464,7 @@ function pinterestLines(params: Record<string, unknown>): string[] {
       : nonEmpty(entry.boardId)
         ? `board ${entry.boardId}`
         : DEFAULT_PINTEREST_BOARD;
-    return `Pinterest: ${board}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}`;
+    return `Pinterest: ${board}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}${entry.aiGenerated === true ? ", AI modified label" : ""}`;
   });
 }
 
@@ -497,6 +497,10 @@ function settingLines(params: Record<string, unknown>): string[] {
   }
   for (const entry of configEntries(params, "twitterConfigs")) {
     if (nonEmpty(entry.quoteOf)) lines.push(`X: quotes ${entry.quoteOf} with the text as commentary`);
+    if (entry.aiGenerated === true) lines.push("X: made with AI label");
+  }
+  for (const entry of configEntries(params, "threadsConfigs")) {
+    if (entry.aiGenerated === true) lines.push("Threads: AI info label");
   }
   lines.push(...pinterestLines(params));
   if (params.twitterKeepLinks === true && stringArray(params.platforms).includes("TWITTER")) {
@@ -727,6 +731,9 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
     entry.youtubeAiGenerated === true ? "altered or synthetic content label" : undefined,
     entry.facebookAiGenerated === true ? "AI info label" : undefined,
+    entry.threadsAiGenerated === true ? "AI info label" : undefined,
+    entry.twitterAiGenerated === true ? "made with AI label" : undefined,
+    entry.pinterestAiGenerated === true ? "AI modified label" : undefined,
     entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`

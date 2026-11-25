@@ -247,11 +247,14 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `boardName` | string | no | The board's name on this Pinterest account (1 to 180 characters), used instead of `boardId`. Names are trimmed; a single exact match wins, then a single case-insensitive match. `400` when no board has the name, when several share it (the message lists their ids), or when `boardId` is also set. Never falls back to another board. Not stored: the post keeps the resolved board id |
 | `title` | string | no | Pin title (max 100 chars) |
 | `link` | string | no | Destination URL when pin is clicked (must be valid URL) |
+| `aiGenerated` | boolean | no | Disclose that the Pin was made or modified with AI. Sends Pinterest the `AI_MODIFIED` disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send `false` for no label |
 
 **Media notes:**
 
 - Ideal aspect ratio: 2:3 (1000x1500)
 - Carousels: 2-5 static images only (no video in carousels)
+
+**AI modified label:** the post reads it back as `pinterestAiGenerated`.
 
 ## LinkedIn — `linkedinConfigs`
 
@@ -303,6 +306,21 @@ Other LinkedIn text, image and video posts need no config object.
 | --- | --- | --- | --- |
 | `connectionId` | string | **yes** | X account connection ID, also in `twitterConnectionIds` |
 | `quoteOf` | string | no | Quote one of this account's own X posts, with the post text as the commentary (max 200 chars). Takes a post link such as `https://x.com/<handle>/status/<id>` or the numeric post id, such as the `platformPostId` from `/social-posts/:id/results`. X only lets an account quote posts it wrote or posts that mention it, so a link naming another handle is refused before posting, and any other post fails at publish time. The text is required, media on the post is not attached on this account, and a quote costs the same as any X post |
+| `aiGenerated` | boolean | no | Disclose that the post contains AI-generated media. Sets `made_with_ai` on the X post, and X labels it. Omit it or send `false` for no label. The post reads it back as `twitterAiGenerated` |
+
+## Threads — `threadsConfigs`
+
+```json
+{
+  "threadsConnectionIds": ["threads-connection-id"],
+  "threadsConfigs": [{ "connectionId": "threads-connection-id", "aiGenerated": true }]
+}
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `connectionId` | string | **yes** | Threads account connection ID; must match an entry in `threadsConnectionIds` |
+| `aiGenerated` | boolean | no | Disclose AI-generated content. Threads shows its "AI info" label on the post. Works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it. Omit it or send `false` for no label. The post reads it back as `threadsAiGenerated` |
 
 ## Google Business Profile — `googleBusinessConfigs`
 
@@ -418,11 +436,11 @@ One entry per location in `googleBusinessConnectionIds`. A location without an e
 
 ## Platforms Without Config Objects
 
-These platforms use only connection ID arrays, plus `twitterConfigs` for an X quote:
+These platforms use only connection ID arrays, plus `twitterConfigs` for an X quote or AI label and `threadsConfigs` for a Threads AI label:
 
 ### X (Twitter)
 
-- Uses `twitterConnectionIds` array; `twitterConfigs` only for `quoteOf`
+- Uses `twitterConnectionIds` array; `twitterConfigs` only for `quoteOf` and `aiGenerated`
 - Character limit: 280
 - Up to 20 images per post, or one video. Images and a video can't share a post
 - Links in X text are broken by default (`example.com` becomes `example. com`) because X charges over 10 times more for a post with a link. Top-level `twitterKeepLinks: true` keeps them clickable, on AppSumo lifetime deals only, at 20 credits instead of 2
@@ -450,7 +468,7 @@ These platforms use only connection ID arrays, plus `twitterConfigs` for an X qu
 
 ### Threads
 
-- Uses `threadsConnectionIds` array
+- Uses `threadsConnectionIds` array; `threadsConfigs` only for `aiGenerated`
 - Text + images + video supported
 - Carousels: up to 10 images and videos
 - Top-level `threadReplies` with `platform: THREADS` turns the post into a thread of up to 25 replies, 500 characters each, with up to 4 images per reply

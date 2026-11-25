@@ -452,8 +452,28 @@ const PlatformConfigFields = {
               "Quote one of this account's own X posts, with the post text as the commentary: a https://x.com/<handle>/status/<id> link or the numeric post id (such as a platformPostId from adaptlypost_post_results). X only lets an account quote posts it wrote or posts that mention it, so a link naming another handle is refused before posting. The text is required, the post's media is not attached on this account, and a quote costs the same as any X post.",
           }),
         ),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              "Disclose that the post contains AI-generated media. Sets made_with_ai on the X post, and X labels it. Omit it or send false for no label.",
+          }),
+        ),
       }),
       { description: "X per-account options. connectionId must match an entry in twitterConnectionIds." },
+    ),
+  ),
+  threadsConfigs: Type.Optional(
+    Type.Array(
+      Type.Object({
+        connectionId: Type.String({ description: "An id from threadsConnectionIds." }),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              'Disclose that the post contains AI-generated content. Threads shows its "AI info" label on the post. Works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it. Omit it or send false for no label.',
+          }),
+        ),
+      }),
+      { description: "Threads per-account options. connectionId must match an entry in threadsConnectionIds." },
     ),
   ),
   pinterestConfigs: Type.Optional(
@@ -476,6 +496,12 @@ const PlatformConfigFields = {
         ),
         title: Type.Optional(Type.String({ maxLength: 100 })),
         link: Type.Optional(Type.String()),
+        aiGenerated: Type.Optional(
+          Type.Boolean({
+            description:
+              'Disclose that the Pin was made or modified with AI. Sends Pinterest the AI_MODIFIED disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send false for no label.',
+          }),
+        ),
       }),
     ),
   ),

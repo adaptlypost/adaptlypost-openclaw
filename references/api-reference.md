@@ -329,13 +329,14 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `telegramConnectionIds` (string[]): Telegram channel and group `id` values from `/social-accounts`. Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB). A caption over 1024 characters goes out as its own message after the media
 - `tumblrConnectionIds` (string[]): Tumblr blog `id` values from `/social-accounts`. Text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video (500 MB, up to 10 minutes)
 - `wordpressConnectionIds` (string[]): WordPress site `id` values from `/social-accounts`. The text becomes the body of a blog post (up to 100,000 characters; blank lines start new paragraphs and bare links become clickable). Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text. A site without a `wordpressConfigs` entry uses the first line of the text as the title
-- `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost"
+- `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost". `aiGenerated: true` discloses that the Pin was made or modified with AI: Pinterest gets the `AI_MODIFIED` disclosure and shows an "AI modified" label on image, video and carousel Pins
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
 - `youtubeConfigs` (array): YouTube-specific settings per connection. `scheduleOnYouTube: true` uploads the video as soon as the post is scheduled, as a private video that YouTube publishes itself at `scheduledAt`, so the user can set up Test & Compare in YouTube Studio first. It needs `privacyStatus` `public` or unset (`400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (`400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts, `reshareOf` to reshare a LinkedIn post)
-- `twitterConfigs` (array): X settings per account: `quoteOf` quotes one of the account's own X posts
+- `twitterConfigs` (array): X settings per account, items `{ connectionId, quoteOf?, aiGenerated? }`: `quoteOf` quotes one of the account's own X posts; `aiGenerated: true` discloses that the post contains AI-generated media, which sets `made_with_ai` on the X post, and X labels it
+- `threadsConfigs` (array): Threads settings per account, items `{ connectionId, aiGenerated? }`. `connectionId` must match an entry in `threadsConnectionIds`. `aiGenerated: true` discloses AI-generated content: Threads shows its "AI info" label on the post. Works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it
 - `googleBusinessConfigs` (array): Google Business Profile settings per location: topic (update, event or offer), button, event and offer details
 - `tumblrConfigs` (array): Tumblr settings per blog: tags, a title and a source link
 - `wordpressConfigs` (array): WordPress settings per site: title, excerpt, category ids, tags and `status` (`PUBLISH`, the default, publishes the post live; `DRAFT` leaves a WordPress draft; `PENDING` submits it for review). See [platform-configs.md](platform-configs.md#wordpress--wordpressconfigs)
@@ -555,7 +556,9 @@ Platform entry fields set by the newer request fields (absent when not used):
 - Instagram: `instagramCollaborators`, `instagramUserTags` (each `{ username, x, y }`), `instagramAiGenerated` (the post carries the AI info label), `instagramUsername` (the handle it published from), `instagramAudioId`, `instagramAudioTitle`, `instagramAudioArtist`, `instagramAudioVolume`, `instagramVideoVolume`
 - Facebook: `facebookTextFormatPresetId`, `facebookImageLayout` (`GRID` or `CAROUSEL`), `facebookCarouselCards` (each with `link`, `title`, `description`), `facebookAiGenerated` (the post carries the AI info label; see `facebookConfigs[].aiGenerated`)
 - YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`), `youtubeDefaultAudioLanguage`, `youtubeScheduleOnYouTube`, `youtubeScheduledVideoId` (the YouTube video uploaded ahead of `scheduledAt`; while it is set and the entry is not published, the post cannot be updated, unscheduled or published early)
-- X: `twitterKeepLinks`, `twitterQuoteOf` (the id of the X post this account quotes)
+- X: `twitterKeepLinks`, `twitterQuoteOf` (the id of the X post this account quotes), `twitterAiGenerated` (the post carries the made-with-AI label; see `twitterConfigs[].aiGenerated`)
+- Threads: `threadsAiGenerated` (the post carries the AI info label; see `threadsConfigs[].aiGenerated`)
+- Pinterest: `pinterestAiGenerated` (the Pin carries the AI modified label; see `pinterestConfigs[].aiGenerated`)
 - LinkedIn: `linkedinDocumentTitle`, `linkedinReshareOf` (the LinkedIn post URN this account reshares)
 - TikTok: `tiktokDraftFallback` (TikTok's daily cap was hit, so the content went to the creator's TikTok inbox as a draft instead of being published)
 - Google Business Profile: `googleBusinessTopicType`, `googleBusinessCallToActionType`, `googleBusinessCallToActionUrl`, `googleBusinessEventTitle`, `googleBusinessEventStart`, `googleBusinessEventEnd`, `googleBusinessOfferCouponCode`, `googleBusinessOfferRedeemUrl`, `googleBusinessOfferTerms`
@@ -622,7 +625,7 @@ Schedule up to 100 posts at once. Each post can have its own content, media, and
 **Optional fields (batch-level):**
 
 - Connection ID arrays: `twitterConnectionIds`, `linkedinConnectionIds`, `instagramConnectionIds`, `tiktokConnectionIds`, `youtubeConnectionIds`, `pinterestConnectionIds`, `blueskyConnectionIds`, `mastodonConnectionIds`, `threadsConnectionIds`, `googleBusinessConnectionIds`, `telegramConnectionIds`, `tumblrConnectionIds`, `wordpressConnectionIds`, `pageIds`
-- Platform configs (applied to all posts as default): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
+- Platform configs (applied to all posts as default): `pinterestConfigs`, `threadsConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs`
 
 `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia` and `platformAspectRatios` go on each post item, not the batch. Bulk does not take `twitterKeepLinks`, `linkedinConfigs`, `twitterConfigs` or `accountIds`.
 
@@ -639,7 +642,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
-- Platform config overrides (per-post): `pinterestConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
+- Platform config overrides (per-post): `pinterestConfigs`, `threadsConfigs`, `tiktokConfigs`, `instagramConfigs`, `facebookConfigs`, `youtubeConfigs`, `googleBusinessConfigs`, `tumblrConfigs`, `wordpressConfigs` — when set on a post item, these override the batch-level configs for that specific post
 
 A Pinterest `boardName`, at the batch level or on an item, is resolved per item. An item whose name matches no board, or several, fails alone with `success: false` and the reason in `errorMessage`; the other items are still scheduled.
 
