@@ -146,12 +146,13 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_search_instagram_audio` | Search Instagram music and original sounds, or list trending audio, for a Reel. |
 | `adaptlypost_list_pinterest_boards` | List the boards a Pinterest account can pin to, secret boards included. |
 | `adaptlypost_list_youtube_playlists` | List the playlists of a YouTube channel, private and unlisted ones included, to pass an `id` as `youtubeConfigs[].playlistId`. |
+| `adaptlypost_list_labels` | List the labels of the workspace, sorted by name, to pass their ids as `labelIds`. |
 | `adaptlypost_list_wordpress_categories` | List the categories of a WordPress site, to pass their ids as `wordpressConfigs[].categoryIds`. |
 | `adaptlypost_resolve_linkedin_organization` | Look up a LinkedIn company page by its URL or vanity name and return the `mention` to paste into a LinkedIn post. |
 | `adaptlypost_upload_media` | Upload files from `mediaDirs` or public URLs, returns public media URLs. Needs approval. |
 | `adaptlypost_create_post` | Draft, schedule, or publish one post across any set of accounts. `mode` is required; SCHEDULE and PUBLISH_NOW need approval. |
 | `adaptlypost_validate_post` | Check a post without creating it. Takes the same parameters as `adaptlypost_create_post` and returns each account's status, the issues to fix and what only the platform can decide. Needs no approval. |
-| `adaptlypost_list_posts` | List posts, including scheduled and draft. |
+| `adaptlypost_list_posts` | List posts, including scheduled and draft, filtered by status, platform, label or date. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
 | `adaptlypost_unschedule_post` | Take a scheduled post off the calendar and keep it as an undated draft. Needs approval. |
@@ -207,7 +208,7 @@ Team tools:
 Creating or deleting a workspace and removing someone from the organization
 also need the key's creator to be an organization owner or admin.
 
-Fifty-three tools, fewer than the MCP server exposes. Post editing, deletion,
+Fifty-four tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
@@ -231,6 +232,13 @@ says so.
 To add a YouTube video to a playlist, list the channel's playlists with
 `adaptlypost_list_youtube_playlists` and pass the chosen `id` as
 `youtubeConfigs[].playlistId`. A playlist belongs to one channel.
+
+To file a post under labels, for example one label per brand, list them with
+`adaptlypost_list_labels` and pass up to 10 ids as `labelIds` on
+`adaptlypost_create_post`. Each post reads its labels back as `labels`, and
+`adaptlypost_list_posts` takes `labelIds` to list the posts carrying any of
+them. Labels stay inside AdaptlyPost and never reach a platform. The plugin
+cannot create them; you make them in the AdaptlyPost app.
 
 Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500
