@@ -154,6 +154,7 @@ OpenClaw's plugin permission requests docs.
 | `adaptlypost_validate_post` | Check a post without creating it. Takes the same parameters as `adaptlypost_create_post` and returns each account's status, the issues to fix and what only the platform can decide. Needs no approval. |
 | `adaptlypost_list_posts` | List posts, including scheduled and draft, filtered by status, platform, label or date. |
 | `adaptlypost_post_results` | Read the per-platform result for one post. |
+| `adaptlypost_set_post_labels` | Replace the labels of one post in any status, published ones included. Labels never reach a platform, so it needs no approval. |
 | `adaptlypost_retry_failed` | Retry only the platforms that failed. Needs approval. |
 | `adaptlypost_unschedule_post` | Take a scheduled post off the calendar and keep it as an undated draft. Needs approval. |
 | `adaptlypost_list_recurring_posts` | List recurring posts, filtered by `ACTIVE`, `PAUSED` or `ENDED`. |
@@ -208,7 +209,7 @@ Team tools:
 Creating or deleting a workspace and removing someone from the organization
 also need the key's creator to be an organization owner or admin.
 
-Fifty-four tools, fewer than the MCP server exposes. Post editing, deletion,
+Fifty-five tools, fewer than the MCP server exposes. Post editing, deletion,
 draft publishing, bulk scheduling and the finer analytics cuts (timeseries,
 per-platform breakdown, sync control) stay out. Those live in the
 [MCP server](https://github.com/TarasShyn/adaptlypost-mcp) and the REST API.
@@ -227,7 +228,10 @@ a board with `adaptlypost_list_pinterest_boards` and pass its `id` as
 `boardId`. Send one or the other, not both. A board belongs to one Pinterest
 account. With neither, the pin goes to a public board named "AdaptlyPost",
 created on the account the first time it is needed, and the approval prompt
-says so.
+says so. To pin into a section of that board, pass `boardSectionName` (the
+section's name, looked up the same way) or `boardSectionId`. No tool lists
+sections, so ask the user for the name. Leave both out to pin to the board
+itself.
 
 To add a YouTube video to a playlist, list the channel's playlists with
 `adaptlypost_list_youtube_playlists` and pass the chosen `id` as
@@ -237,8 +241,10 @@ To file a post under labels, for example one label per brand, list them with
 `adaptlypost_list_labels` and pass up to 10 ids as `labelIds` on
 `adaptlypost_create_post`. Each post reads its labels back as `labels`, and
 `adaptlypost_list_posts` takes `labelIds` to list the posts carrying any of
-them. Labels stay inside AdaptlyPost and never reach a platform. The plugin
-cannot create them; you make them in the AdaptlyPost app.
+them. To change the labels of a post that already exists, in any status,
+use `adaptlypost_set_post_labels`. Labels stay inside AdaptlyPost and never
+reach a platform. The plugin cannot create them; you make them in the
+AdaptlyPost app.
 
 Google Business Profile locations go in `googleBusinessConnectionIds`. A post
 there is text, or text with one JPEG or PNG image up to 5 MB, up to 1500
@@ -278,7 +284,8 @@ reshared or quoted.
 `twitterConfigs[].aiGenerated` sets `made_with_ai` on the X post so X labels
 it, `threadsConfigs[].aiGenerated` adds Threads' "AI info" label (thread
 replies do not carry it), and `pinterestConfigs[].aiGenerated` adds Pinterest's
-"AI modified" label. Each `threadsConfigs` entry's `connectionId` must match one
+"AI modified" label. `pinterestConfigs[].aiGeneratedPerson` also discloses that
+the Pin shows a person generated with AI. Each `threadsConfigs` entry's `connectionId` must match one
 in `threadsConnectionIds`. The approval prompt shows each label.
 
 To mention a LinkedIn company page, call

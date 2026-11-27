@@ -397,7 +397,7 @@ function youtubeExtras(entry: ConfigEntry): string {
     entry.notifySubscribers === false ? "no subscriber notification" : undefined,
     entry.allowEmbedding === false ? "embedding off" : undefined,
     entry.scheduleOnYouTube === true
-      ? "uploaded now as a private video that YouTube publishes at the scheduled time"
+      ? "uploaded 48 hours early as a private video that YouTube publishes at the scheduled time"
       : undefined,
   ].filter(nonEmpty);
   return parts.length ? `, ${parts.join(", ")}` : "";
@@ -464,7 +464,12 @@ function pinterestLines(params: Record<string, unknown>): string[] {
       : nonEmpty(entry.boardId)
         ? `board ${entry.boardId}`
         : DEFAULT_PINTEREST_BOARD;
-    return `Pinterest: ${board}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}${entry.aiGenerated === true ? ", AI modified label" : ""}`;
+    const section = nonEmpty(entry.boardSectionName)
+      ? `, section "${entry.boardSectionName}"`
+      : nonEmpty(entry.boardSectionId)
+        ? `, section ${entry.boardSectionId}`
+        : "";
+    return `Pinterest: ${board}${section}${nonEmpty(entry.title) ? `, title "${entry.title}"` : ""}${nonEmpty(entry.link) ? `, link ${entry.link}` : ""}${entry.aiGenerated === true ? ", AI modified label" : ""}${entry.aiGeneratedPerson === true ? ", AI-generated person label" : ""}`;
   });
 }
 
@@ -726,6 +731,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
       : entry.platform === "PINTEREST"
         ? DEFAULT_PINTEREST_BOARD
         : undefined,
+    nonEmpty(entry.pinterestBoardSectionId) ? `section ${entry.pinterestBoardSectionId}` : undefined,
     stringArray(entry.instagramCollaborators).length ? `collaborators ${handles(entry.instagramCollaborators)}` : undefined,
     tagHandles(entry.instagramUserTags) ? `tags ${tagHandles(entry.instagramUserTags)}` : undefined,
     entry.instagramAiGenerated === true ? "AI info label" : undefined,
@@ -734,6 +740,7 @@ function platformEntryLines(entry: PostPlatform, fallbackText: string | undefine
     entry.threadsAiGenerated === true ? "AI info label" : undefined,
     entry.twitterAiGenerated === true ? "made with AI label" : undefined,
     entry.pinterestAiGenerated === true ? "AI modified label" : undefined,
+    entry.pinterestAiGeneratedPerson === true ? "AI-generated person label" : undefined,
     entry.facebookImageLayout === "CAROUSEL" ? carouselLabel(entry.facebookCarouselCards) : undefined,
     nonEmpty(entry.instagramAudioId)
       ? `audio ${nonEmpty(entry.instagramAudioTitle) ? `"${entry.instagramAudioTitle}"` : entry.instagramAudioId}`

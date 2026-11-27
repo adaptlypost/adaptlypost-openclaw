@@ -21,7 +21,7 @@ Which permission each endpoint needs:
 | Endpoint | Permission | Roles |
 | --- | --- | --- |
 | `GET /social-posts`, `GET /social-posts/:id`, `GET /social-posts/:id/results`, `GET /labels`, `GET /recurring-posts`, `GET /recurring-posts/:id` | `posts.read` | all |
-| `POST /social-posts` with `saveAsDraft: true`; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` on a dated `DRAFT` | `posts.draft` | admin, editor, contributor |
+| `POST /social-posts` with `saveAsDraft: true`; `PUT /social-posts/:id/labels` on a post in any status; `PATCH /social-posts/:id` and `DELETE /social-posts/:id` on a `DRAFT`; `POST /social-posts/:id/unschedule` on a dated `DRAFT` | `posts.draft` | admin, editor, contributor |
 | `POST /social-posts` and `POST /social-posts/:id/publish` with a future `scheduledAt` (so every `POST /social-posts` with `recurrence`); `POST /social-posts/:id/publish` without `scheduledAt` or `publishNow` on a draft whose planned date is in the future; `PATCH /social-posts/:id` and `POST /social-posts/:id/unschedule` on a post that is not a `DRAFT`; `POST /social-posts/bulk`; `POST /recurring-posts/:id/pause`, `POST /recurring-posts/:id/resume` | `posts.schedule` | admin, editor |
 | `POST /social-posts` without `scheduledAt` or with a past one; `POST /social-posts/:id/publish` with a past `scheduledAt`, with `publishNow: true`, or without either on a post that has no future planned date; `POST /social-posts/:id/retry`; `POST /social-posts/bulk` with any item due now or earlier | `posts.publish` | admin, editor |
 | `DELETE /social-posts/:id` on a post that is not a `DRAFT`; `DELETE /recurring-posts/:id` | `posts.delete` | admin, editor |
@@ -275,7 +275,7 @@ List the labels of the workspace, sorted by name. The API cannot create labels; 
 }
 ```
 
-`color` is a hex color. Pass the chosen ids as `labelIds` on [POST /social-posts](#post-social-posts) or [PATCH /social-posts/:id](#patch-social-postsid) to put those labels on a post, and as the `labelIds` filter of [GET /social-posts](#get-social-posts) to list the posts carrying them. Labels stay inside AdaptlyPost and are never sent to a platform.
+`color` is a hex color. Pass the chosen ids as `labelIds` on [POST /social-posts](#post-social-posts) or [PATCH /social-posts/:id](#patch-social-postsid) to put those labels on a post, [PUT /social-posts/:id/labels](#put-social-postsidlabels) to replace the labels of a post in any status, and as the `labelIds` filter of [GET /social-posts](#get-social-posts) to list the posts carrying them. Labels stay inside AdaptlyPost and are never sent to a platform.
 
 ### POST /social-posts
 
@@ -320,7 +320,7 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `text` (string): Default post text for all platforms. On LinkedIn, mention a company page with `@[Page Name](urn:li:organization:<id>)`, using the page name exactly as LinkedIn shows it; `GET /linkedin-organizations/lookup` returns the ready-made mention
 - `platformTexts` (array): Per-platform text overrides. Each: `{ "platform": "TWITTER", "text": "..." }`. The LinkedIn mention syntax works here too
 - `mediaUrls` (string[]): Public URLs of uploaded media files
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters, on image, carousel and video Pins. TikTok, YouTube, Google Business Profile and Telegram ignore it, and so do videos on the other platforms
 - `thumbnailUrl` (string): Video thumbnail as an https URL or an image data URI, used on every platform that takes one unless `platformThumbnails` overrides it
 - `thumbnailTimestampMs` (number): Video frame (ms) to use as the thumbnail on every platform that takes one: `YOUTUBE`, `FACEBOOK`, `INSTAGRAM`, `LINKEDIN`, `PINTEREST`, `TELEGRAM` and `TIKTOK`. A `thumbnailUrl` sent with it wins everywhere except `TIKTOK`, and `platformThumbnails` overrides both
 - `platformThumbnails` (array): A different thumbnail per platform. See [Platform thumbnails](#platform-thumbnails)
@@ -347,11 +347,11 @@ A draft (`saveAsDraft: true`) needs `posts.draft`, with or without a planned dat
 - `telegramConnectionIds` (string[]): Telegram channel and group `id` values from `/social-accounts`. Text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video (50 MB). A caption over 1024 characters goes out as its own message after the media
 - `tumblrConnectionIds` (string[]): Tumblr blog `id` values from `/social-accounts`. Text up to 32768 characters, up to 30 JPEG, PNG or GIF images (10 MB each) or one MP4 video (500 MB, up to 10 minutes)
 - `wordpressConnectionIds` (string[]): WordPress site `id` values from `/social-accounts`. The text becomes the body of a blog post (up to 100,000 characters; blank lines start new paragraphs and bare links become clickable). Up to 20 JPEG, PNG, WebP or GIF images (20 MB each) or one MP4 or MOV video (500 MB); the first image is the featured image and the other images or the video follow the text. A site without a `wordpressConfigs` entry uses the first line of the text as the title
-- `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost". `aiGenerated: true` discloses that the Pin was made or modified with AI: Pinterest gets the `AI_MODIFIED` disclosure and shows an "AI modified" label on image, video and carousel Pins
+- `pinterestConfigs` (array): Pinterest-specific settings per connection. Pick the board with `boardId` or `boardName` (the board's name on that account, resolved when the request is handled; `400` when no board or several boards have it), never both. With neither, the pin goes to a public board named "AdaptlyPost". Pin into a section of that board with `boardSectionId` or `boardSectionName` (the section's name, max 180 characters, resolved like `boardName`; `400` when no section or several sections have it, when both are set, or when no board is given), never both; leave both out to pin to the board itself. `aiGenerated: true` discloses that the Pin was made or modified with AI: Pinterest gets the `AI_MODIFIED` disclosure and shows an "AI modified" label on image, video and carousel Pins. `aiGeneratedPerson: true` discloses that the Pin shows a person generated with AI: Pinterest gets the `SYNTHETIC_PERFORMER` disclosure, next to `AI_MODIFIED` when `aiGenerated` is also set
 - `tiktokConfigs` (array): TikTok-specific settings per connection
 - `instagramConfigs` (array): Instagram-specific settings per connection
 - `facebookConfigs` (array): Facebook-specific settings per page
-- `youtubeConfigs` (array): YouTube-specific settings per connection. `scheduleOnYouTube: true` uploads the video as soon as the post is scheduled, as a private video that YouTube publishes itself at `scheduledAt`, so the user can set up Test & Compare in YouTube Studio first. It needs `privacyStatus` `public` or unset (`400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (`400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual
+- `youtubeConfigs` (array): YouTube-specific settings per connection. `scheduleOnYouTube: true` uploads the video 48 hours before `scheduledAt` (at once when `scheduledAt` is closer), as a private video that YouTube publishes itself at `scheduledAt`, so the user can set up Test & Compare in YouTube Studio first. It needs `privacyStatus` `public` or unset (`400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (`400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual
 - `linkedinConfigs` (array): LinkedIn-specific settings per connection (`documentTitle` for `DOCUMENT` posts, `reshareOf` to reshare a LinkedIn post)
 - `twitterConfigs` (array): X settings per account, items `{ connectionId, quoteOf?, aiGenerated? }`: `quoteOf` quotes one of the account's own X posts; `aiGenerated: true` discloses that the post contains AI-generated media, which sets `made_with_ai` on the X post, and X labels it
 - `threadsConfigs` (array): Threads settings per account, items `{ connectionId, aiGenerated? }`. `connectionId` must match an entry in `threadsConnectionIds`. `aiGenerated: true` discloses AI-generated content: Threads shows its "AI info" label on the post. Works on text, image, video and carousel posts; on a carousel the label covers the whole post. Thread replies do not carry it
@@ -580,7 +580,7 @@ Platform entry fields set by the newer request fields (absent when not used):
 - YouTube: `youtubeAiGenerated` (the video carries the altered or synthetic content label; see `youtubeConfigs[].aiGenerated`), `youtubeDefaultAudioLanguage`, `youtubeScheduleOnYouTube`, `youtubeScheduledVideoId` (the YouTube video uploaded ahead of `scheduledAt`; while it is set and the entry is not published, the post cannot be updated, unscheduled or published early)
 - X: `twitterKeepLinks`, `twitterQuoteOf` (the id of the X post this account quotes), `twitterAiGenerated` (the post carries the made-with-AI label; see `twitterConfigs[].aiGenerated`)
 - Threads: `threadsAiGenerated` (the post carries the AI info label; see `threadsConfigs[].aiGenerated`)
-- Pinterest: `pinterestAiGenerated` (the Pin carries the AI modified label; see `pinterestConfigs[].aiGenerated`)
+- Pinterest: `pinterestAiGenerated` (the Pin carries the AI modified label; see `pinterestConfigs[].aiGenerated`), `pinterestAiGeneratedPerson` (the Pin discloses an AI-generated person; see `pinterestConfigs[].aiGeneratedPerson`), `pinterestBoardSectionId` (the board section the Pin goes to)
 - LinkedIn: `linkedinDocumentTitle`, `linkedinReshareOf` (the LinkedIn post URN this account reshares)
 - TikTok: `tiktokDraftFallback` (TikTok's daily cap was hit, so the content went to the creator's TikTok inbox as a draft instead of being published)
 - Google Business Profile: `googleBusinessTopicType`, `googleBusinessCallToActionType`, `googleBusinessCallToActionUrl`, `googleBusinessEventTitle`, `googleBusinessEventStart`, `googleBusinessEventEnd`, `googleBusinessOfferCouponCode`, `googleBusinessOfferRedeemUrl`, `googleBusinessOfferTerms`
@@ -660,7 +660,7 @@ See [platform-configs.md](platform-configs.md) for config schemas.
 - `text` (string): Post text
 - `platformTexts` (array): Per-platform text overrides
 - `mediaUrls` (string[]): Media file URLs
-- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters. TikTok, YouTube, Google Business Profile, Telegram and videos ignore it
+- `mediaAltTexts` (string[]): Alt text for each image, in the same order as `mediaUrls` (max 1000 characters each; use `""` to skip an image). Sent to X, Bluesky, Mastodon, Tumblr, WordPress, LinkedIn, Facebook, Instagram and Threads. Pinterest uses the first one, cut to 500 characters, on image, carousel and video Pins. TikTok, YouTube, Google Business Profile and Telegram ignore it, and so do videos on the other platforms
 - `thumbnailUrl` (string): Thumbnail URL for video posts
 - `thumbnailTimestampMs` (number): Thumbnail position in video (ms)
 - `firstComments`, `threadReplies`, `platformThumbnails`, `platformMedia`, `platformAspectRatios` (arrays): Same as on [POST /social-posts](#first-comments)
@@ -830,6 +830,22 @@ Accepts the same body as `POST /social-posts`, minus `saveAsDraft`, `recurrence`
 `labelIds` takes label IDs from [GET /labels](#get-labels), max 10. Sending the list replaces every label of the post, an empty list removes them all, and leaving it out keeps the stored ones. An ID that is not a label of the workspace returns `400`.
 
 **Response:** the updated post, in the same shape as `GET /social-posts/:id`.
+
+### PUT /social-posts/:id/labels
+
+Replace every label of a post, in any status, published posts included. Use it for a post `PATCH` refuses, such as a `COMPLETED` one. Labels stay inside AdaptlyPost and are never sent to a platform, so changing them after a post is published changes nothing on the platform. Needs `posts.draft`.
+
+**Request:**
+
+```json
+{ "labelIds": ["cmlab1a2b0000i0r5lbl0abcd"] }
+```
+
+- `labelIds` (string[], required): label IDs from [GET /labels](#get-labels), max 10. They replace every label of the post; `[]` removes them all.
+
+An ID that is not a label of the workspace, or more than 10 IDs, returns `400`. An id outside the workspace returns `404` `Post not found`.
+
+**Response:** the post with its new `labels`, in the same shape as `GET /social-posts/:id`.
 
 ### POST /social-posts/:id/unschedule
 
@@ -1464,7 +1480,7 @@ Compare with a timing-safe function, and reject timestamps that are far from now
 
 ### Delivery behaviour
 
-AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per attempt. After 20 consecutive failures the webhook is deactivated, which is why a receiver that has been down for a while goes quiet and stays quiet: reactivate it with `PATCH /webhooks/:id`.
+AdaptlyPost retries a failing endpoint 5 times with a 10 second timeout per attempt. When every delivery to a webhook has failed for 3 hours, its creator gets an email warning. When every delivery has failed for 3 days with no successful one in that time, the webhook is disabled and its creator gets a second email. An endpoint that answers `410 Gone` disables it at once. A disabled webhook gets nothing more until you reactivate it with `PATCH /webhooks/:id` and `{ "active": true }`. A successful delivery or re-enabling the webhook starts the count again.
 
 ## Analytics
 

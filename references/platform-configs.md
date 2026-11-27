@@ -217,7 +217,7 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `defaultAudioLanguage` | string or null | no | Language spoken in the video's original audio, as a BCP-47 tag such as `en`, `pt-BR` or `es-419` (max 35 chars), so YouTube does not treat it as another language. `null` clears a saved value. Does not turn off YouTube's automatic dubbing |
 | `categoryId` | string | no | YouTube category ID |
 | `playlistId` | string | no | Playlist `id` from `GET /social-accounts/:id/youtube-playlists`; the video is added to it after publishing. A playlist belongs to one channel |
-| `scheduleOnYouTube` | boolean | no | Upload the video as soon as the post is scheduled, as a private video with YouTube's own publish time set to `scheduledAt`. YouTube publishes it at that time, so the user can set up Test & Compare in YouTube Studio first. Needs `privacyStatus` `public` or unset (else `400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (else `400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual. Once `youtubeScheduledVideoId` is set, the post cannot be updated, unscheduled or published early (`409`); delete it and schedule it again. Deleting before `scheduledAt` also deletes the video from YouTube, and a refusal from YouTube returns `502` with the post kept |
+| `scheduleOnYouTube` | boolean | no | Upload the video 48 hours before `scheduledAt` (at once when `scheduledAt` is closer), as a private video with YouTube's own publish time set to `scheduledAt`. YouTube publishes it at that time, so the user can set up Test & Compare in YouTube Studio first. Needs `privacyStatus` `public` or unset (else `400` `YOUTUBE_SCHEDULE_REQUIRES_PUBLIC`) and no `recurrence` (else `400` `YOUTUBE_SCHEDULE_NOT_RECURRING`). With `scheduledAt` less than 15 minutes ahead the video uploads at `scheduledAt` as usual. Once `youtubeScheduledVideoId` is set, the post cannot be updated, unscheduled or published early (`409`); delete it and schedule it again. Deleting before `scheduledAt` also deletes the video from YouTube, and a refusal from YouTube returns `502` with the post kept |
 
 **Media notes:**
 
@@ -245,9 +245,12 @@ Needs `contentType: VIDEO`, a `postType` other than `STORY`, and an account whos
 | `connectionId` | string | **yes** | Pinterest account connection ID |
 | `boardId` | string | no | Board `id` from `GET /social-accounts/:id/pinterest-boards`. Not together with `boardName`. Without either, the pin goes to a public board named "AdaptlyPost", created on the Pinterest account the first time it is needed |
 | `boardName` | string | no | The board's name on this Pinterest account (1 to 180 characters), used instead of `boardId`. Names are trimmed; a single exact match wins, then a single case-insensitive match. `400` when no board has the name, when several share it (the message lists their ids), or when `boardId` is also set. Never falls back to another board. Not stored: the post keeps the resolved board id |
+| `boardSectionId` | string | no | A section `id` of the chosen board. Needs `boardId` or `boardName`. Not together with `boardSectionName`. Leave both section fields out to pin to the board itself |
+| `boardSectionName` | string | no | The name of one of the chosen board's sections (max 180 chars), used instead of `boardSectionId`. A single exact match wins, then a single case-insensitive match. `400` when no section has the name, when several do (the message lists their ids), when `boardSectionId` is also set, or when no board is given. The post keeps the resolved section id |
 | `title` | string | no | Pin title (max 100 chars) |
 | `link` | string | no | Destination URL when pin is clicked (must be valid URL) |
 | `aiGenerated` | boolean | no | Disclose that the Pin was made or modified with AI. Sends Pinterest the `AI_MODIFIED` disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send `false` for no label |
+| `aiGeneratedPerson` | boolean | no | Disclose that the Pin shows a person generated with AI. Sends Pinterest the `SYNTHETIC_PERFORMER` disclosure, next to `AI_MODIFIED` when `aiGenerated` is also set. Works on image, video and carousel Pins. Omit it or send `false` for no disclosure |
 
 **Media notes:**
 

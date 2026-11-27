@@ -273,7 +273,7 @@ const PlatformConfigFields = {
         scheduleOnYouTube: Type.Optional(
           Type.Boolean({
             description:
-              "Upload the video as soon as the post is scheduled, as a private video with YouTube's own publish time set to scheduledAt, and YouTube publishes it at that time. Use it when the user wants to set up Test & Compare (thumbnail or title A/B tests) in YouTube Studio before the video goes public. privacyStatus must be public or left out (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a post with recurrence is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the upload is done the platform entry carries youtubeScheduledVideoId, and the post can no longer be unscheduled or edited (409). To change it, the user deletes it in the AdaptlyPost app and schedules it again.",
+              "Upload the video 48 hours before scheduledAt (at once when scheduledAt is closer), as a private video with YouTube's own publish time set to scheduledAt, and YouTube publishes it at that time. Use it when the user wants to set up Test & Compare (thumbnail or title A/B tests) in YouTube Studio before the video goes public. privacyStatus must be public or left out (400 YOUTUBE_SCHEDULE_REQUIRES_PUBLIC), and a post with recurrence is refused (400 YOUTUBE_SCHEDULE_NOT_RECURRING). With scheduledAt less than 15 minutes ahead the video uploads at scheduledAt as usual. Once the upload is done the platform entry carries youtubeScheduledVideoId, and the post can no longer be unscheduled or edited (409). To change it, the user deletes it in the AdaptlyPost app and schedules it again.",
           }),
         ),
       }),
@@ -494,12 +494,33 @@ const PlatformConfigFields = {
               "The board's name on this connectionId's Pinterest account, used instead of boardId when the user named the board, so no lookup is needed. AdaptlyPost trims it and takes the single exact match, or else the single case-insensitive match. Fails with 400 when no board has the name or several boards share it (the message lists their ids; pass one as boardId), and never falls back to another board. Not together with boardId.",
           }),
         ),
+        boardSectionId: Type.Optional(
+          Type.String({
+            minLength: 1,
+            description:
+              "A section id of the chosen board. Needs boardId or boardName. Not together with boardSectionName. Leave both section fields out to pin to the board itself.",
+          }),
+        ),
+        boardSectionName: Type.Optional(
+          Type.String({
+            minLength: 1,
+            maxLength: 180,
+            description:
+              "The name of one of the chosen board's sections, used instead of boardSectionId when the user named the section. AdaptlyPost takes the exact match, or else the case-insensitive match, and stores the section id. Fails with 400 when no section has the name, when several do (the message lists their ids; pass one as boardSectionId), when boardSectionId is also set, or when no board is given. No tool lists sections, so ask the user for the name.",
+          }),
+        ),
         title: Type.Optional(Type.String({ maxLength: 100 })),
         link: Type.Optional(Type.String()),
         aiGenerated: Type.Optional(
           Type.Boolean({
             description:
               'Disclose that the Pin was made or modified with AI. Sends Pinterest the AI_MODIFIED disclosure, which shows an "AI modified" label on the Pin. Works on image, video and carousel Pins. Omit it or send false for no label.',
+          }),
+        ),
+        aiGeneratedPerson: Type.Optional(
+          Type.Boolean({
+            description:
+              "Disclose that the Pin shows a person generated with AI. Sends Pinterest the SYNTHETIC_PERFORMER disclosure, next to AI_MODIFIED when aiGenerated is also set. Works on image, video and carousel Pins. Omit it or send false for no disclosure.",
           }),
         ),
       }),
@@ -1049,7 +1070,7 @@ export default definePluginEntry({
       name: "adaptlypost_list_labels",
       label: "AdaptlyPost: list labels",
       description:
-        "List the labels of the token's workspace, sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Call it when the user wants a post filed under a label, for example one label per brand: match the label they named or ask which one, and pass its id in labelIds of adaptlypost_create_post, or in labelIds of adaptlypost_list_posts to list the posts carrying it. Labels are created in the AdaptlyPost app; this plugin cannot create them, so when no label has the name the user gave, tell them to create it there. Takes no arguments. Nothing is posted.",
+        "List the labels of the token's workspace, sorted by name. Returns { labels } with id, name and color (a hex such as #3B82F6). Call it when the user wants a post filed under a label, for example one label per brand: match the label they named or ask which one, and pass its id in labelIds of adaptlypost_create_post, in label_ids of adaptlypost_set_post_labels to change the labels of an existing post, or in labelIds of adaptlypost_list_posts to list the posts carrying it. Labels are created in the AdaptlyPost app; this plugin cannot create them, so when no label has the name the user gave, tell them to create it there. Takes no arguments. Nothing is posted.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
         return jsonResult(await callApi(cfg(), "GET", "/labels", { signal }));
@@ -1140,7 +1161,7 @@ export default definePluginEntry({
       name: CREATE_POST_TOOL,
       label: "AdaptlyPost: create or schedule a post",
       description:
-        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. To add a YouTube video to a playlist, pass a playlist id from adaptlypost_list_youtube_playlists as youtubeConfigs[].playlistId. To file the post under labels, pass ids from adaptlypost_list_labels as labelIds. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Tumblr (TUMBLR) takes tags, a title and a source link through tumblrConfigs. WordPress (WORDPRESS) publishes the text as a blog post; set the title, excerpt, categories (ids from adaptlypost_list_wordpress_categories) and tags with wordpressConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image or a frame as its thumbnail through platformThumbnails. When the media does not fit one platform (a video too long for TikTok, more images than X takes), give that platform its own through platformMedia. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>); get that mention from adaptlypost_resolve_linkedin_organization with the page URL or vanity name. To reshare a LinkedIn post use linkedinConfigs[].reshareOf; to quote one of the X account's own posts use twitterConfigs[].quoteOf. The approval prompt also shows each platform's own media from platformMedia, first comments, thread replies with their image counts, LinkedIn reshares, X quotes, YouTube tags, playlists and early uploads with scheduleOnYouTube, TikTok interaction settings, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board, Tumblr and WordPress titles, categories and tags, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
+        "Create one post for one or more platforms. mode is required and says what happens: DRAFT stores it for review in the AdaptlyPost app and needs no approval; SCHEDULE (with a future scheduledAt) and PUBLISH_NOW pause for the user's approval of the exact content, accounts and timing, and a denied or unanswered approval publishes nothing. Pick DRAFT whenever the user has not explicitly said to post now or at a set time, and always in unattended runs. The API key carries a workspace role: a Contributor key can only draft, so SCHEDULE and PUBLISH_NOW get 403 permission_denied from AdaptlyPost; when the plugin knows the key cannot do what was asked, the approval prompt says so and offers to save a draft instead, and the result then carries savedAsDraft: true. Publishing runs asynchronously per platform, so the response ({ postId, queuedPlatforms, skippedPlatforms, isScheduled, scheduledAt }) is not the outcome; read adaptlypost_post_results, where each platform succeeds or fails on its own. skippedPlatforms lists each platform AdaptlyPost left out of the post as { platform, reason }: when it is not empty, tell the user which platforms were skipped and why, and ask before posting again. Every account must be connected: an account whose status in adaptlypost_accounts is unauthorized makes AdaptlyPost refuse the whole post with 400, so the plugin refuses it before the approval prompt. Call adaptlypost_accounts first: each platform in platforms needs its connection-id array (linkedinConnectionIds, pageIds for Facebook, and so on), one account per platform. TikTok needs tiktokConfigs with privacyLevel. For Pinterest, pass the board the user named as boardName in pinterestConfigs, or a boardId from adaptlypost_list_pinterest_boards, never both; with neither the pin goes to a public board named AdaptlyPost. To pin into a section of that board, pass the section the user named as boardSectionName, or its boardSectionId. To add a YouTube video to a playlist, pass a playlist id from adaptlypost_list_youtube_playlists as youtubeConfigs[].playlistId. To file the post under labels, pass ids from adaptlypost_list_labels as labelIds. For a LinkedIn document (PDF, slides or Word file) use contentType DOCUMENT with that one file in mediaUrls and only LINKEDIN in platforms. Google Business Profile (GOOGLE_BUSINESS) takes TEXT or IMAGE with one JPEG or PNG up to 5 MB and text up to 1500 characters; set an event, offer or button with googleBusinessConfigs. Tumblr (TUMBLR) takes tags, a title and a source link through tumblrConfigs. WordPress (WORDPRESS) publishes the text as a blog post; set the title, excerpt, categories (ids from adaptlypost_list_wordpress_categories) and tags with wordpressConfigs. Telegram (TELEGRAM) takes TEXT, IMAGE, VIDEO or CAROUSEL with text up to 4096 characters, up to 10 images (JPEG, PNG or WebP, 10 MB each) or one MP4 or MOV video up to 50 MB; a caption over 1024 characters goes out as its own message after the media, and a video takes an image or a frame as its thumbnail through platformThumbnails. When the media does not fit one platform (a video too long for TikTok, more images than X takes), give that platform its own through platformMedia. For Instagram audio on a Reel, find an audioId with adaptlypost_search_instagram_audio. On LinkedIn, mention a company page in the text with @[Page Name](urn:li:organization:<id>); get that mention from adaptlypost_resolve_linkedin_organization with the page URL or vanity name. To reshare a LinkedIn post use linkedinConfigs[].reshareOf; to quote one of the X account's own posts use twitterConfigs[].quoteOf. The approval prompt also shows each platform's own media from platformMedia, first comments, thread replies with their image counts, LinkedIn reshares, X quotes, YouTube tags, playlists and early uploads with scheduleOnYouTube, TikTok interaction settings, Instagram collaborators, user tags, audio and story sharing, Google Business Profile topics and buttons, the Pinterest board and section, Tumblr and WordPress titles, categories and tags, and kept X links. mediaUrls must come from adaptlypost_upload_media, or the call fails with 'Media file(s) not found in storage'. Vary the caption per platform with platformTexts when posting widely: identical text across many accounts is what spam classifiers look for. To repeat the post (every Monday, daily, monthly, yearly), add recurrence with mode SCHEDULE; the response then carries recurringPostId, and postId is the first post. A recurring post cannot be a draft or include TikTok, and only the create call takes recurrence.",
       parameters: PostParameters,
       async execute(toolCallId, params, signal) {
         const post = params as Record<string, unknown> & { mode: string };
@@ -1242,6 +1263,31 @@ export default definePluginEntry({
         const { post_id: postId } = params as { post_id: string };
         return jsonResult(
           await callApi(cfg(), "GET", `/social-posts/${encodeURIComponent(postId)}/results`, { signal }),
+        );
+      },
+    });
+
+    api.registerTool({
+      name: "adaptlypost_set_post_labels",
+      label: "AdaptlyPost: set a post's labels",
+      description:
+        "Replace every label of one post, in any status, published posts included. label_ids takes up to 10 ids from adaptlypost_list_labels; [] removes every label. Labels stay inside AdaptlyPost and never reach a platform, so changing them on a published post changes nothing on the platform, and the call needs no approval. Needs a key that can draft posts (posts.draft). Fails with 400 when an id is not a label of the workspace or more than 10 are sent, and 404 for a post outside the token's workspace. Returns the post with its new labels, in the shape of adaptlypost_list_posts entries.",
+      parameters: Type.Object({
+        post_id: Type.String({
+          description: "Post id from adaptlypost_list_posts or adaptlypost_create_post.",
+        }),
+        label_ids: Type.Array(Type.String(), {
+          maxItems: 10,
+          description: "Label ids from adaptlypost_list_labels. They replace every label of the post; [] removes them all.",
+        }),
+      }),
+      async execute(_toolCallId, params, signal) {
+        const { post_id: postId, label_ids: labelIds } = params as { post_id: string; label_ids: string[] };
+        return jsonResult(
+          await callApi(cfg(), "PUT", `/social-posts/${encodeURIComponent(postId)}/labels`, {
+            body: { labelIds },
+            signal,
+          }),
         );
       },
     });
